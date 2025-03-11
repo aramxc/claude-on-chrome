@@ -1,5 +1,3 @@
-import { analyzeText } from './services/claudeService';
-
 // Background script for Claude on Chrome
 
 // Setup context menus when extension is installed

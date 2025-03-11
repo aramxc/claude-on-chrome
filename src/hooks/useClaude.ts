@@ -1,3 +1,4 @@
+import { Anthropic } from '@anthropic-ai/sdk';
 import { useState, useCallback } from 'react';
 
 interface UseClaudeApiOptions {
@@ -11,7 +12,7 @@ interface AnalysisResult {
   loading: boolean;
   error: string | null;
   response: string | null;
-  analyzeText: (text: string) => Promise<void>;
+  analyzeText: (text: string) => Promise<string | undefined>;
 }
 
 export function useClaude({
@@ -36,45 +37,42 @@ export function useClaude({
     try {
       console.log(`Analyzing text with model: ${model}, style: ${style}`);
       
-      const requestBody: any = {
+      // Create the client
+      const client = new Anthropic({
+        apiKey: apiKey,
+        dangerouslyAllowBrowser: true,
+      });
+      
+      // Create the messages request
+      const message = await client.messages.create({
         model: model,
         max_tokens: 1000,
         messages: [
-          { 
-            role: 'user', 
-            content: userInput 
-          }
+          { role: "user", content: userInput }
         ],
-        temperature: style === 'creative' ? 0.9 : (style === 'precise' ? 0.3 : 0.5),
-      };
-      
-      // Only add system if it's provided
-      if (systemPrompt && systemPrompt.trim() !== '') {
-        requestBody.system = systemPrompt;
-      }
-      
-      console.log("Request body:", JSON.stringify(requestBody, null, 2));
-      
-      const apiResponse = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          
-        },
-        body: JSON.stringify(requestBody),
+        system: systemPrompt
       });
-
-      if (!apiResponse.ok) {
-        const errorData = await apiResponse.text();
-        console.error("API Error:", errorData);
-        throw new Error(`API request failed: ${apiResponse.status} - ${errorData}`);
+      
+      console.log("API Response:", message);
+      
+      // Extract the response text
+      let result = 'No text response from Claude';
+      
+      if (message.content && message.content.length > 0) {
+        const firstContent = message.content[0];
+        
+        if (firstContent.type === 'text') {
+          result = firstContent.text;
+        } else {
+          console.warn('First content block is not text:', firstContent);
+          
+          const textBlock = message.content.find(block => block.type === 'text');
+          if (textBlock && 'text' in textBlock) {
+            result = textBlock.text;
+          }
+        }
       }
-
-      const responseData = await apiResponse.json();
-      console.log("API Response:", responseData);
-      const result = responseData.content[0].text || 'No response from Claude';
+      
       setResponse(result);
       return result;
     } catch (error: any) {
