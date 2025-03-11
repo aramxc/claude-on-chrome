@@ -1,79 +1,30 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useClaude } from '../hooks/useClaude';
 
 interface MainProps {
   apiKey: string;
   model: string;
   style: string;
-  prompt: string;
+  systemPrompt: string;
 }
 
-const Main: React.FC<MainProps> = ({ apiKey, model, style, prompt }) => {
-  const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState('');
+const Main: React.FC<MainProps> = ({ apiKey, model, style, systemPrompt }) => {
   const [input, setInput] = useState('');
-  const [error, setError] = useState('');
   const [initialLoading, setInitialLoading] = useState(true);
+  
+  const { 
+    loading, 
+    error, 
+    response, 
+    analyzeText 
+  } = useClaude({ apiKey, model, style, systemPrompt });
 
-  // We need to define this function here since we can't import from background.ts easily
-  async function analyzeText(
-    text: string,
-    apiKey: string,
-    model: string,
-    style: string
-  ): Promise<string> {
-    console.log(`Analyzing text with model: ${model}, style: ${style}`);
-    
-    try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: 1000,
-          messages: [{ role: 'user', content: text }],
-          temperature: style === 'creative' ? 0.9 : (style === 'precise' ? 0.3 : 0.5),
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error("API Error:", errorData);
-        throw new Error(`API request failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.content[0].text || 'No response from Claude';
-    } catch (error: any) {
-      console.error('Error analyzing text:', error);
-      throw error;
-    }
-  }
-
-  const handleAnalysis = useCallback(async (text: string) => {
+  const handleAnalysis = async (text: string) => {
     console.log("Handling analysis for text:", text);
     setInput(text);
-    setLoading(true);
-    setError('');
-    try {
-      const result = await analyzeText(
-        `${prompt}\n\n${text}`,
-        apiKey,
-        model,
-        style
-      );
-      setResponse(result);
-    } catch (error: any) {
-      console.error("Analysis error:", error);
-      setError(`Error: ${error.message}`);
-    } finally {
-      setLoading(false);
-      setInitialLoading(false);
-    }
-  }, [apiKey, model, style, prompt]);
+    await analyzeText(text);
+    setInitialLoading(false);
+  };
 
   useEffect(() => {
     console.log("Main component mounted");
@@ -107,6 +58,16 @@ const Main: React.FC<MainProps> = ({ apiKey, model, style, prompt }) => {
       }
     });
 
+    // Check if there's a pending analysis request in storage
+    chrome.storage.local.get(['pendingAnalysis'], (result) => {
+      if (result.pendingAnalysis) {
+        console.log("Found pending analysis:", result.pendingAnalysis);
+        handleAnalysis(result.pendingAnalysis);
+        // Clear the pending analysis after handling it
+        chrome.storage.local.remove(['pendingAnalysis']);
+      }
+    });
+
     // If we don't get a response within 1 second, stop the loading state
     const timeout = setTimeout(() => {
       setInitialLoading(false);
@@ -116,17 +77,15 @@ const Main: React.FC<MainProps> = ({ apiKey, model, style, prompt }) => {
       clearTimeout(timeout);
       chrome.runtime.onMessage.removeListener(messageListener);
     };
-  }, [handleAnalysis]);
+  }, []);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden p-4">
       <div className="mb-3 flex items-center">
-        <div className="bg-blue-600 rounded-full p-1 mr-2">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
+        <div className="rounded-full p-1 mr-2">
+          <img src="assets/brain_128.png" className="h-8 w-8" alt="Brain icon" />
         </div>
-        <h2 className="text-lg font-semibold">Claude Analyzer</h2>
+        <h2 className="text-lg font-semibold">Claude in Chrome</h2>
       </div>
       
       <div className="text-xs text-gray-500 mb-3">
@@ -136,6 +95,14 @@ const Main: React.FC<MainProps> = ({ apiKey, model, style, prompt }) => {
           <span className="mx-1">•</span>
           <span className="mr-1">Style:</span>
           <span className="text-gray-400 capitalize">{style}</span>
+          <span className="mx-1">•</span>
+          <span className="mr-1">System:</span>
+          <span 
+            className="text-gray-400 cursor-help"
+            title={systemPrompt}
+          >
+            {systemPrompt.length > 20 ? systemPrompt.substring(0, 20) + '...' : systemPrompt}
+          </span>
         </div>
       </div>
       

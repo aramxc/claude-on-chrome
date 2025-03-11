@@ -1,3 +1,5 @@
+import { analyzeText } from './services/claudeService';
+
 // Background script for Claude on Chrome
 
 // Setup context menus when extension is installed
@@ -22,13 +24,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log("Background received message:", request);
   
   if (request.type === 'analyzeSelection' || request.type === 'analyzePage') {
-    // Forward the message to any open popup
-    chrome.runtime.sendMessage(request);
+    // Store the data for when popup opens
+    chrome.storage.local.set({ pendingAnalysis: request.data }, () => {
+      console.log("Stored pending analysis data:", request.data.substring(0, 100) + "...");
+    });
+    
+    // Try to forward the message to any open popup
+    chrome.runtime.sendMessage(request)
+      .catch(error => {
+        console.log("Error forwarding message to popup, it might not be open:", error);
+      });
+      
     sendResponse({ success: true });
   } else if (request.highlightedText !== undefined) {
     console.log("Received highlighted text in background:", request.highlightedText);
-    // Forward to popup if open
-    chrome.runtime.sendMessage(request);
+    
+    // Store highlighted text for when popup opens
+    if (request.highlightedText) {
+      chrome.storage.local.set({ pendingAnalysis: request.highlightedText }, () => {
+        console.log("Stored highlighted text for analysis");
+      });
+    }
+    
+    // Try to forward to popup if open
+    chrome.runtime.sendMessage(request)
+      .catch(error => {
+        console.log("Error forwarding highlighted text to popup:", error);
+      });
+      
     sendResponse({ received: true });
   }
   
@@ -46,49 +69,25 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   }
   
   if (info.menuItemId === 'analyzeSelection') {
-    chrome.tabs.sendMessage(tab.id, {action: 'analyzeSelection'});
-    chrome.action.openPopup(); // Open popup after sending message
+    // Store the selection text for the popup to use
+    if (info.selectionText) {
+      console.log("Storing selection for analysis:", info.selectionText);
+      chrome.storage.local.set({ pendingAnalysis: info.selectionText }, () => {
+        // Open the popup after storage is set
+        chrome.action.openPopup();
+      });
+    }
   } else if (info.menuItemId === 'analyzePage') {
-    chrome.tabs.sendMessage(tab.id, {action: 'analyzePage'});
-    chrome.action.openPopup(); // Open popup after sending message
+    console.log("Sending analyzePage message to tab:", tab.id);
+    // For page analysis, we'll need to get the content via the content script
+    chrome.tabs.sendMessage(tab.id, {action: 'analyzePage'})
+      .catch(error => {
+        console.error("Error sending message to tab:", error);
+      });
+    
+    // Open the popup
+    setTimeout(() => {
+      chrome.action.openPopup();
+    }, 100); // Small delay to allow content script to process
   }
 });
-
-// Standalone function for text analysis
-export async function analyzeText(
-  text: string,
-  apiKey: string,
-  model: string,
-  style: string
-): Promise<string> {
-  console.log(`Analyzing text with model: ${model}, style: ${style}`);
-  
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: text }],
-        temperature: style === 'creative' ? 0.9 : (style === 'precise' ? 0.3 : 0.5),
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error("API Error:", errorData);
-      throw new Error(`API request failed: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.content[0].text || 'No response from Claude';
-  } catch (error: any) {
-    console.error('Error analyzing text:', error);
-    throw error;
-  }
-}

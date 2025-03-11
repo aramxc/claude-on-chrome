@@ -4,29 +4,29 @@ interface InitialSetupProps {
   setApiKey: (key: string) => void;
   setModel: (model: string) => void;
   setStyle: (style: string) => void;
-  setPrompt: (prompt: string) => void;
+  setSystemPrompt: (prompt: string) => void;
 }
 
 const InitialSetup: React.FC<InitialSetupProps> = ({ 
-  setApiKey, setModel, setStyle, setPrompt 
+  setApiKey, setModel, setStyle, setSystemPrompt 
 }) => {
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [modelInput, setModelInput] = useState('claude-3-opus-20240229');
   const [styleInput, setStyleInput] = useState('default');
-  const [promptInput, setPromptInput] = useState('Analyze this in detail:');
+  const [systemPromptInput, setSystemPromptInput] = useState('Analyze this in detail:');
 
   const handleSave = () => {
     setApiKey(apiKeyInput);
     setModel(modelInput);
     setStyle(styleInput);
-    setPrompt(promptInput);
+    setSystemPrompt(systemPromptInput);
 
     // Store settings securely in Chrome storage
     chrome.storage.sync.set({
       apiKey: apiKeyInput,
       model: modelInput,
       style: styleInput,
-      prompt: promptInput
+      systemPrompt: systemPromptInput
     }, () => {
       console.log("Initial settings saved");
     });
@@ -90,31 +90,31 @@ const InitialSetup: React.FC<InitialSetupProps> = ({
           <div className="grid grid-cols-3 gap-2 mb-2">
             <button 
               className={`px-2 py-1 text-sm rounded ${
-                promptInput === 'Analyze this in detail:' 
+                systemPromptInput === 'Analyze this in detail:' 
                   ? 'bg-blue-600 text-white' 
                   : 'bg-gray-800 text-gray-300'
               }`}
-              onClick={() => setPromptInput('Analyze this in detail:')}
+              onClick={() => setSystemPromptInput('Analyze this in detail:')}
             >
               Analyze
             </button>
             <button 
               className={`px-2 py-1 text-sm rounded ${
-                promptInput === 'Summarize the key points of this:' 
+                systemPromptInput === 'Summarize the key points of this:' 
                   ? 'bg-blue-600 text-white' 
                   : 'bg-gray-800 text-gray-300'
               }`}
-              onClick={() => setPromptInput('Summarize the key points of this:')}
+              onClick={() => setSystemPromptInput('Summarize the key points of this:')}
             >
               Summarize
             </button>
             <button 
               className={`px-2 py-1 text-sm rounded ${
-                promptInput === 'Critique and give feedback on this:' 
+                systemPromptInput === 'Critique and give feedback on this:' 
                   ? 'bg-blue-600 text-white' 
                   : 'bg-gray-800 text-gray-300'
               }`}
-              onClick={() => setPromptInput('Critique and give feedback on this:')}
+              onClick={() => setSystemPromptInput('Critique and give feedback on this:')}
             >
               Critique
             </button>

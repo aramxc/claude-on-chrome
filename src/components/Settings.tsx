@@ -4,35 +4,35 @@ interface SettingsProps {
   apiKey: string;
   model: string;
   style: string;
-  prompt: string;
+  systemPrompt: string;
   setApiKey: (key: string) => void;
   setModel: (model: string) => void;
   setStyle: (style: string) => void;
-  setPrompt: (prompt: string) => void;
+  setSystemPrompt: (prompt: string) => void;
 }
 
 const Settings: React.FC<SettingsProps> = ({ 
-  apiKey, model, style, prompt, 
-  setApiKey, setModel, setStyle, setPrompt 
+  apiKey, model, style, systemPrompt, 
+  setApiKey, setModel, setStyle, setSystemPrompt 
 }) => {
   const [apiKeyInput, setApiKeyInput] = useState(apiKey);
   const [modelInput, setModelInput] = useState(model);
   const [styleInput, setStyleInput] = useState(style);
-  const [promptInput, setPromptInput] = useState(prompt);
+  const [systemPromptInput, setSystemPromptInput] = useState(systemPrompt);
   const [saveStatus, setSaveStatus] = useState('');
 
   const handleSave = () => {
     setApiKey(apiKeyInput);
     setModel(modelInput);
     setStyle(styleInput);
-    setPrompt(promptInput);
+    setSystemPrompt(systemPromptInput);
 
     // Store settings securely in Chrome storage
     chrome.storage.sync.set({
       apiKey: apiKeyInput,
       model: modelInput,
       style: styleInput,
-      prompt: promptInput
+      systemPrompt: systemPromptInput
     }, () => {
       setSaveStatus('Settings saved');
       setTimeout(() => setSaveStatus(''), 2000);
@@ -89,43 +89,43 @@ const Settings: React.FC<SettingsProps> = ({
         
         <div>
           <label className="block text-sm font-medium text-gray-400 mb-1">
-            Prompt Template
+            System Prompt
           </label>
           <div className="grid grid-cols-3 gap-2 mb-2">
             <button 
               className={`px-2 py-1 text-sm rounded ${
-                promptInput === 'Analyze this in detail:' 
+                systemPromptInput === 'Analyze this in detail:' 
                   ? 'bg-blue-600 text-white' 
                   : 'bg-gray-800 text-gray-300'
               }`}
-              onClick={() => setPromptInput('Analyze this in detail:')}
+              onClick={() => setSystemPromptInput('Analyze this in detail:')}
             >
               Analyze
             </button>
             <button 
               className={`px-2 py-1 text-sm rounded ${
-                promptInput === 'Summarize the key points of this:' 
+                systemPromptInput === 'Summarize the key points of this:' 
                   ? 'bg-blue-600 text-white' 
                   : 'bg-gray-800 text-gray-300'
               }`}
-              onClick={() => setPromptInput('Summarize the key points of this:')}
+              onClick={() => setSystemPromptInput('Summarize the key points of this:')}
             >
               Summarize
             </button>
             <button 
               className={`px-2 py-1 text-sm rounded ${
-                promptInput === 'Critique and give feedback on this:' 
+                systemPromptInput === systemPromptInput
                   ? 'bg-blue-600 text-white' 
                   : 'bg-gray-800 text-gray-300'
               }`}
-              onClick={() => setPromptInput('Critique and give feedback on this:')}
+              onClick={() => setSystemPromptInput(systemPromptInput)}
             >
-              Critique
+              Custom
             </button>
           </div>
           <textarea
-            value={promptInput}
-            onChange={(e) => setPromptInput(e.target.value)}
+            value={systemPromptInput}
+            onChange={(e) => setSystemPromptInput(e.target.value)}
             className="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
             rows={3}
           />

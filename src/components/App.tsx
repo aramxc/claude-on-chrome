@@ -7,18 +7,33 @@ const App: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState('claude-3-opus-20240229');
   const [style, setStyle] = useState('default');
-  const [prompt, setPrompt] = useState('Analyze this in detail:');
+  const [systemPrompt, setSystemPrompt] = useState('Analyze this in detail:');
   const [activeTab, setActiveTab] = useState('main');
+  const [isLoading, setIsLoading] = useState(true);
   
   useEffect(() => {
     // Load settings from storage
-    chrome.storage.sync.get(['apiKey', 'model', 'style', 'prompt'], (result) => {
+    chrome.storage.sync.get(['apiKey', 'model', 'style', 'systemPrompt'], (result) => {
       if (result.apiKey) setApiKey(result.apiKey);
       if (result.model) setModel(result.model); 
       if (result.style) setStyle(result.style);
-      if (result.prompt) setPrompt(result.prompt);
+      if (result.systemPrompt) setSystemPrompt(result.systemPrompt);
+      setIsLoading(false);
     });
   }, []);
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-[600px] w-[400px] bg-black text-white items-center justify-center">
+        <div className="animate-pulse">
+          <svg className="w-10 h-10 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        </div>
+      </div>
+    );
+  }
 
   // Determine which content to show
   const renderContent = () => {
@@ -27,22 +42,22 @@ const App: React.FC = () => {
         setApiKey={setApiKey} 
         setModel={setModel} 
         setStyle={setStyle}
-        setPrompt={setPrompt}
+        setSystemPrompt={setSystemPrompt}
       />;
     }
     
     if (activeTab === 'main') {
-      return <Main apiKey={apiKey} model={model} style={style} prompt={prompt} />;
+      return <Main apiKey={apiKey} model={model} style={style} systemPrompt={systemPrompt} />;
     } else {
       return <Settings 
         apiKey={apiKey}
         model={model}
         style={style}
-        prompt={prompt}
+        systemPrompt={systemPrompt}
         setApiKey={setApiKey}
         setModel={setModel}
         setStyle={setStyle}
-        setPrompt={setPrompt}
+        setSystemPrompt={setSystemPrompt}
       />;
     }
   };
