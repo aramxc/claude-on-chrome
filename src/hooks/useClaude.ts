@@ -14,9 +14,6 @@ interface AnalysisResult {
   analyzeText: (text: string) => Promise<void>;
 }
 
-// Update this with your Vercel deployment URL
-const PROXY_URL = 'https://your-vercel-deployment-url.vercel.app/api/claude';
-
 export function useClaude({
   apiKey,
   model,
@@ -58,8 +55,7 @@ export function useClaude({
       
       console.log("Request body:", JSON.stringify(requestBody, null, 2));
       
-      // Use the proxy server
-      const apiResponse = await fetch(PROXY_URL, {
+      const apiResponse = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
