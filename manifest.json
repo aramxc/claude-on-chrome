@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Claude on Chrome",
+  "version": "1.0",
+  "description": "Highlight text (or entire pages) and analyze it with Claude AI",
+  "icons": {
+    "48": "public/assets/brain_48.png",
+    "128": "public/assets/brain_128.png"
+  },
+  "permissions": [
+    "activeTab",
+    "storage",
+    "contextMenus"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["dist/content.js"]
+    }
+  ],
+ "content_security_policy": {
+  "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "background": {
+    "service_worker": "dist/background.js"
+  },
+  "action": {
+    "default_popup": "dist/popup.html",
+    "default_popup_width": 1000
+  }
+}
