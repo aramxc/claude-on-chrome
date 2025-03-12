@@ -24,6 +24,7 @@ export function useConfig() {
     chrome.storage.sync.get(['apiKey', 'model', 'style', 'systemPrompt'], (result) => {
       setConfig(prev => ({...prev, ...result}));
       setIsReady(true);
+      console.log('Config loaded: with apiKey, model, style, systemPrompt', result);
     });
   }, []);
 
@@ -31,6 +32,7 @@ export function useConfig() {
   const saveConfig = useCallback((newConfig: ClaudeConfig) => {
     setConfig(newConfig);
     chrome.storage.sync.set(newConfig);
+    console.log('Config saved secure storage', newConfig);
     return newConfig;
   }, []);
 
@@ -85,19 +87,18 @@ export function useClaude(config: ClaudeConfig) {
     setError('');
     
     try {
-      const result = await callClaudeAPI(text, config);
-      if (typeof result === 'string') {
-        setResponse(result);
-      } else {
-        // Handle the case where result might not be a string
-        setResponse(String(result) || '');
+        const result = await callClaudeAPI(text, config);
+        if (typeof result === 'string') {
+          setResponse(result);
+        } else {
+          setResponse(String(result) || '');
+        }
+      } catch (err: any) {
+        setError(err.message || 'Analysis failed');
+      } finally {
+        setLoading(false);
       }
-    } catch (err: any) {
-      setError(err.message || 'Analysis failed');
-    } finally {
-      setLoading(false);
-    }
-  }, [config]);
+    }, [config]);
 
   return { inputText, response, loading, error, analyzeText, setInputText };
 }

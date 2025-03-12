@@ -1,4 +1,4 @@
-import { ClaudeConfig, ClaudeResponse } from '../types/claude';
+import { ClaudeConfig } from '../types/claude';
 
 /**
  * Call Claude API to analyze text
@@ -15,52 +15,31 @@ export async function analyzeText(
     throw new Error('No text to analyze');
   }
   
-  // Set temperature based on style
-  const temperature = 
-    config.style === 'creative' ? 0.9 : 
-    config.style === 'precise' ? 0.3 : 
-    0.5; // default
   
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": config.apiKey,
-        "anthropic-version": "2025-01-24",
-        "content-type": "application/json",
-        "anthropic-dangerous-direct-browser-access": "true",
-      },
-      body: JSON.stringify({
+    const response = await chrome.runtime.sendMessage({
+      action: 'callClaudeAPI',
+      payload: {
+        apiKey: config.apiKey,
         model: config.model,
-        max_tokens: 1000,
-        temperature,
-        messages: [{ role: "user", content: text }],
-        system: config.systemPrompt || ""
-      }),
+        system: config.systemPrompt || "",
+        content: text,
+        temperature: config.temperature
+      }
     });
     
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => null);
-      
-      // Friendly error messages
-      if (response.status === 401) {
-        throw new Error('Invalid API key');
-      } else if (response.status === 429) {
-        throw new Error('Rate limit exceeded');
-      } else {
-        throw new Error(errorData?.error?.message || `API error: ${response.status}`);
-      }
+    if (response.error) {
+      throw new Error(response.error);
     }
     
-    const data = await response.json() as ClaudeResponse;
-    
     // Extract response text from content array
-    const textBlock = data.content?.find(block => block.type === 'text');
+    const textBlock = response.result.content?.find((block: any) => block.type === 'text');
     return textBlock?.text || 'No text response from Claude';
     
   } catch (error: any) {
-    if (error.name === 'TypeError' || error.message?.includes('CORS')) {
-      throw new Error('Browser security blocked the request. Try using a proxy.');
+    console.error("Error calling Claude API:", error);
+    if (error.message?.includes('Could not establish connection')) {
+      throw new Error('Communication with background script failed. Please reload the extension.');
     }
     throw error;
   }

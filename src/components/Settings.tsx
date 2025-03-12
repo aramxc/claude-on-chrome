@@ -67,7 +67,7 @@ const Settings: React.FC<SettingsProps> = ({
             className="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
             <option value="claude-3-opus-20240229">Claude 3 Opus</option>
-            <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
+            <option value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet</option>
             <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
           </select>
         </div>

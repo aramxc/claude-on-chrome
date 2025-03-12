@@ -4,6 +4,7 @@ export interface ClaudeConfig {
     model: string;
     style: string;
     systemPrompt?: string;
+    temperature?: number;
   }
   
   export interface ClaudeResponse {

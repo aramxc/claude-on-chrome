@@ -18,21 +18,36 @@ const Main: React.FC<MainProps> = ({ config }) => {
   // Check for highlighted text when popup opens
   useEffect(() => {
     if (chrome.tabs) {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
         if (tabs[0]?.id) {
-          chrome.tabs.sendMessage(tabs[0].id, { action: 'getSelection' })
-            .then(response => {
-              if (response?.text && !inputText) {
-                analyzeText(response.text);
-              }
-            })
-            .catch(err => {
-              console.error("Error getting selection:", err);
+          try {
+            // First ensure content script is loaded (communicate with background.ts)
+            await chrome.runtime.sendMessage({ 
+              action: 'ensureContentScriptLoaded', 
+              tabId: tabs[0].id 
             });
+            
+            // Then try to get the selection
+            const response = await chrome.tabs.sendMessage(tabs[0].id, { action: 'getSelection' });
+            if (response?.text && !inputText) {
+              analyzeText(response.text);
+            }
+          } catch (err) {
+            console.log("Could not get selection: content script may not be available on this page");
+            
+            // Check if we have a pending analysis from context menu
+            chrome.storage.local.get(['pendingAnalysis'], (result) => {
+              if (result.pendingAnalysis && !inputText) {
+                analyzeText(result.pendingAnalysis);
+                // Clear after using
+                chrome.storage.local.remove(['pendingAnalysis']);
+              }
+            });
+          }
         }
       });
     }
-  }, []);
+  }, [inputText, analyzeText]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden p-4">
@@ -104,6 +119,7 @@ const Main: React.FC<MainProps> = ({ config }) => {
                 </div>
               </div>
             )}
+            
             
             {!inputText && !error && !response && (
               <div className="h-full flex flex-col items-center justify-center text-center">
