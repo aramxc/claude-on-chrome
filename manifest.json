@@ -4,8 +4,8 @@
   "version": "1.0",
   "description": "Highlight text (or entire pages) and analyze it with Claude AI",
   "icons": {
-    "48": "public/assets/brain_48.png",
-    "128": "public/assets/brain_128.png"
+    "48": "assets/brain_48.png",
+    "128": "assets/brain_128.png"
   },
   "permissions": [
     "contextMenus",
@@ -19,7 +19,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["dist/content.js"],
+      "js": ["content.js"],
       "run_at": "document_end"
     }
   ],
@@ -27,10 +27,10 @@
   "extension_pages": "script-src 'self'; object-src 'self'"
   },
   "background": {
-    "service_worker": "dist/background.js"
+    "service_worker": "background.js"
   },
   "action": {
-    "default_popup": "dist/popup.html",
+    "default_popup": "popup.html",
     "default_popup_width": 1000
   }
 }

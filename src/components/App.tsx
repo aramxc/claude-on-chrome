@@ -47,19 +47,24 @@ const App: React.FC = () => {
     }
     
     if (activeTab === 'main') {
-      return <Main apiKey={apiKey} model={model} style={style} systemPrompt={systemPrompt} />;
-    } else {
-      return <Settings 
-        apiKey={apiKey}
-        model={model}
-        style={style}
-        systemPrompt={systemPrompt}
-        setApiKey={setApiKey}
-        setModel={setModel}
-        setStyle={setStyle}
-        setSystemPrompt={setSystemPrompt}
-      />;
-    }
+        return <Main config={{
+          apiKey,
+          model,
+          style,
+          systemPrompt
+        }} />;
+      } else if (activeTab === 'settings') {
+        return <Settings 
+          apiKey={apiKey}
+          model={model}
+          style={style}
+          systemPrompt={systemPrompt}
+          setApiKey={setApiKey}
+          setModel={setModel}
+          setStyle={setStyle}
+          setSystemPrompt={setSystemPrompt}
+        />;
+      }
   };
 
   return (

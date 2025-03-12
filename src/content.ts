@@ -1,48 +1,61 @@
-console.log("Content script loaded");
+// Standard message format for all communication
+type Message = {
+  action: 'getSelection' | 'getPageContent' | 'ping',
+  payload?: any
+}
 
-// Listen for messages from background script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log("Content script received message:", message);
+// Get selected text function
+function getSelectedText(): string {
+  const selection = window.getSelection();
+  return selection ? selection.toString().trim() : '';
+}
+
+// Extract page content intelligently
+function getPageContent(): string {
+  // Try to find main content container
+  const mainContent = document.querySelector('main, article, #content, .content');
   
-  if (message.action === 'analyzeSelection') {
-    const selection = window.getSelection()?.toString() || '';
-    console.log("Selected text:", selection);
-    chrome.runtime.sendMessage({type: 'analyzeSelection', data: selection});
-    sendResponse({success: true});
-  } 
-  else if (message.action === 'analyzePage') {
-    console.log("Analyzing entire page");
-    // Get page content (simpler version - just get text)
-    const pageText = document.body.innerText || document.body.textContent || '';
-    console.log("Page text length:", pageText.length);
-    
-    // Limit text length to avoid overwhelming the API
-    const truncatedText = pageText.substring(0, 10000);
-    
-    // Store the data directly to ensure it's available when popup opens
-    chrome.storage.local.set({ pendingAnalysis: truncatedText }, () => {
-      console.log("Stored page content for analysis");
-      
-      // Also send message to any open popup
-      chrome.runtime.sendMessage({
-        type: 'analyzePage', 
-        data: truncatedText
-      }).catch(error => {
-        console.log("Error forwarding to popup (might not be open):", error);
-      });
-      
-      sendResponse({success: true});
-    });
-  } 
-  else if (message.getHighlightedText) {
-    const selection = window.getSelection()?.toString() || '';
-    console.log("Getting highlighted text:", selection);
-    chrome.runtime.sendMessage({highlightedText: selection});
-    sendResponse({success: true});
+  if (mainContent) {
+    return mainContent.textContent || '';
   }
   
-  // Return true to indicate we'll send a response asynchronously
-  return true;
+  // Fallback: Remove navigation, etc. from body
+  const bodyClone = document.body.cloneNode(true) as HTMLElement;
+  
+  ['nav', 'header', 'footer', 'aside', '[role="navigation"]', '[role="banner"]', '[role="contentinfo"]']
+    .forEach(selector => {
+      bodyClone.querySelectorAll(selector)
+        .forEach(el => el.parentNode?.removeChild(el));
+    });
+  
+  // Clean and truncate text
+  return (bodyClone.textContent || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .substring(0, 10000);
+}
+
+// Message handler
+chrome.runtime.onMessage.addListener((message: Message, sender, sendResponse) => {
+  console.log("Content script received:", message);
+  
+  switch (message.action) {
+    case 'getSelection':
+      sendResponse({ text: getSelectedText() });
+      break;
+      
+    case 'getPageContent':
+      sendResponse({ text: getPageContent() });
+      break;
+      
+    case 'ping':
+      sendResponse({ ready: true });
+      break;
+  }
+  
+  return true; // Keep message channel open for async response
 });
 
-console.log("Content script initialization complete");
+// Notify background script that content script is loaded
+chrome.runtime.sendMessage({ action: 'ready' })
+  .catch(error => console.log("Ready message error:", error));

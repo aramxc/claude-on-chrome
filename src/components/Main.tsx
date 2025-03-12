@@ -1,82 +1,37 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useClaude } from '../hooks/useClaude';
+import { ClaudeConfig } from '../types/claude';
 
-interface MainProps {
-  apiKey: string;
-  model: string;
-  style: string;
-  systemPrompt: string;
+export interface MainProps {
+  config: ClaudeConfig;
 }
 
-const Main: React.FC<MainProps> = ({ apiKey, model, style, systemPrompt }) => {
-  const [input, setInput] = useState('');
-  const [initialLoading, setInitialLoading] = useState(true);
-  
+const Main: React.FC<MainProps> = ({ config }) => {
   const { 
+    inputText, 
+    response, 
     loading, 
     error, 
-    response, 
-    analyzeText 
-  } = useClaude({ apiKey, model, style, systemPrompt });
+    analyzeText
+  } = useClaude(config);
 
-  const handleAnalysis = async (text: string) => {
-    console.log("Handling analysis for text:", text);
-    setInput(text);
-    await analyzeText(text);
-    setInitialLoading(false);
-  };
-
+  // Check for highlighted text when popup opens
   useEffect(() => {
-    console.log("Main component mounted");
-    
-    const messageListener = (message: any) => {
-      console.log("Main received message:", message);
-      
-      if (message.type === 'analyzeSelection' || message.type === 'analyzePage') {
-        handleAnalysis(message.data);
-      } else if (message.highlightedText !== undefined) {
-        if (message.highlightedText) {
-          handleAnalysis(message.highlightedText);
+    if (chrome.tabs) {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.id) {
+          chrome.tabs.sendMessage(tabs[0].id, { action: 'getSelection' })
+            .then(response => {
+              if (response?.text && !inputText) {
+                analyzeText(response.text);
+              }
+            })
+            .catch(err => {
+              console.error("Error getting selection:", err);
+            });
         }
-        setInitialLoading(false);
-      }
-    };
-
-    chrome.runtime.onMessage.addListener(messageListener);
-    
-    // Check for highlighted text when popup opens
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      console.log("Active tabs:", tabs);
-      if (tabs[0]?.id) {
-        chrome.tabs.sendMessage(tabs[0].id, { getHighlightedText: true })
-          .catch(err => {
-            console.error("Error sending message to tab:", err);
-            setInitialLoading(false);
-          });
-      } else {
-        setInitialLoading(false);
-      }
-    });
-
-    // Check if there's a pending analysis request in storage
-    chrome.storage.local.get(['pendingAnalysis'], (result) => {
-      if (result.pendingAnalysis) {
-        console.log("Found pending analysis:", result.pendingAnalysis);
-        handleAnalysis(result.pendingAnalysis);
-        // Clear the pending analysis after handling it
-        chrome.storage.local.remove(['pendingAnalysis']);
-      }
-    });
-
-    // If we don't get a response within 1 second, stop the loading state
-    const timeout = setTimeout(() => {
-      setInitialLoading(false);
-    }, 1000);
-
-    return () => {
-      clearTimeout(timeout);
-      chrome.runtime.onMessage.removeListener(messageListener);
-    };
+      });
+    }
   }, []);
 
   return (
@@ -89,30 +44,30 @@ const Main: React.FC<MainProps> = ({ apiKey, model, style, systemPrompt }) => {
       </div>
       
       <div className="text-xs text-gray-500 mb-3">
-        <div className="flex items-center">
+        <div className="flex items-center flex-wrap">
           <span className="mr-1">Model:</span>
-          <span className="text-gray-400">{model.replace('claude-3-', '').replace('-20240229', '').replace('-20240307', '')}</span>
+          <span className="text-gray-400">{config.model.replace('claude-3-', '').replace(/-\d{8}$/, '')}</span>
           <span className="mx-1">•</span>
           <span className="mr-1">Style:</span>
-          <span className="text-gray-400 capitalize">{style}</span>
+          <span className="text-gray-400 capitalize">{config.style}</span>
           <span className="mx-1">•</span>
           <span className="mr-1">System:</span>
           <span 
             className="text-gray-400 cursor-help"
-            title={systemPrompt}
+            title={config.systemPrompt ?? 'No system prompt'}
           >
-            {systemPrompt.length > 20 ? systemPrompt.substring(0, 20) + '...' : systemPrompt}
+            {config.systemPrompt && config.systemPrompt.length > 20 
+              ? config.systemPrompt.substring(0, 20) + '...' 
+              : config.systemPrompt || 'None'}
           </span>
         </div>
       </div>
       
       <div className="flex-1 overflow-auto">
-        {initialLoading || loading ? (
+        {loading ? (
           <div className="h-full flex flex-col items-center justify-center">
             <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-3"></div>
-            <p className="text-gray-400 text-sm">
-              {initialLoading ? "Loading..." : "Analyzing with Claude..."}
-            </p>
+            <p className="text-gray-400 text-sm">Analyzing with Claude...</p>
           </div>
         ) : (
           <>
@@ -122,7 +77,7 @@ const Main: React.FC<MainProps> = ({ apiKey, model, style, systemPrompt }) => {
               </div>
             )}
             
-            {input && (
+            {inputText && (
               <div className="mb-4">
                 <div className="text-xs text-gray-500 mb-1 flex items-center">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -131,7 +86,7 @@ const Main: React.FC<MainProps> = ({ apiKey, model, style, systemPrompt }) => {
                   Input
                 </div>
                 <div className="bg-gray-900 rounded-md p-3 text-sm text-gray-300 max-h-24 overflow-y-auto">
-                  {input}
+                  {inputText}
                 </div>
               </div>
             )}
@@ -150,7 +105,7 @@ const Main: React.FC<MainProps> = ({ apiKey, model, style, systemPrompt }) => {
               </div>
             )}
             
-            {!input && !error && !response && (
+            {!inputText && !error && !response && (
               <div className="h-full flex flex-col items-center justify-center text-center">
                 <div className="bg-gray-800 rounded-full p-3 mb-3">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">

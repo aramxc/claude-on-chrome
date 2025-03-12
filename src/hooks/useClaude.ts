@@ -1,102 +1,103 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { analyzeText as callClaudeAPI } from '../services/claudeService';
+import { ClaudeConfig } from '../types/claude';
 
-interface UseClaudeApiOptions {
-  apiKey: string;
-  model: string;
-  style: string;
-  systemPrompt: string;
+
+
+// Default configuration
+export const DEFAULT_CONFIG: ClaudeConfig = {
+  apiKey: '',
+  model: 'claude-3-opus-',
+  style: 'default',
+  systemPrompt: 'Analyze this in detail:'
+};
+
+/**
+ * Hook to manage configuration state
+ */
+export function useConfig() {
+  const [config, setConfig] = useState<ClaudeConfig>(DEFAULT_CONFIG);
+  const [isReady, setIsReady] = useState(false);
+
+  // Load config on mount
+  useEffect(() => {
+    chrome.storage.sync.get(['apiKey', 'model', 'style', 'systemPrompt'], (result) => {
+      setConfig(prev => ({...prev, ...result}));
+      setIsReady(true);
+    });
+  }, []);
+
+  // Save config to storage
+  const saveConfig = useCallback((newConfig: ClaudeConfig) => {
+    setConfig(newConfig);
+    chrome.storage.sync.set(newConfig);
+    return newConfig;
+  }, []);
+
+  return { config, isReady, saveConfig };
 }
 
-interface AnalysisResult {
-  loading: boolean;
-  error: string | null;
-  response: string | null;
-  analyzeText: (text: string) => Promise<string | undefined>;
-}
-
-export function useClaude({
-  apiKey,
-  model,
-  style,
-  systemPrompt
-}: UseClaudeApiOptions): AnalysisResult {
+/**
+ * Hook to manage text analysis with Claude
+ */
+export function useClaude(config: ClaudeConfig) {
+  const [inputText, setInputText] = useState('');
+  const [response, setResponse] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [response, setResponse] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  
+  // Check for pending analysis on mount
+  useEffect(() => {
+    chrome.storage.local.get(['pendingAnalysis'], (result) => {
+      if (result.pendingAnalysis) {
+        setInputText(result.pendingAnalysis);
+        if (config.apiKey) {
+          analyzeText(result.pendingAnalysis);
+        }
+        chrome.storage.local.remove(['pendingAnalysis']);
+      }
+    });
+    
+    // Listen for messages from background/content scripts
+    const messageListener = (message: any) => {
+      if ((message.type === 'analyzeSelection' || message.type === 'analyzePage') && message.data) {
+        setInputText(message.data);
+        if (config.apiKey) {
+          analyzeText(message.data);
+        }
+      } else if (message.highlightedText) {
+        setInputText(message.highlightedText);
+        if (config.apiKey) {
+          analyzeText(message.highlightedText);
+        }
+      }
+    };
+    
+    chrome.runtime.onMessage.addListener(messageListener);
+    return () => chrome.runtime.onMessage.removeListener(messageListener);
+  }, [config.apiKey]);
 
-  const analyzeText = useCallback(async (userInput: string) => {
-    if (!apiKey) {
-      setError('API key is required');
-      return;
-    }
-
+  // Analyze text with Claude
+  const analyzeText = useCallback(async (text: string) => {
+    if (!config.apiKey || !text) return;
+    
     setLoading(true);
-    setError(null);
+    setError('');
     
     try {
-      console.log(`Analyzing text with model: ${model}, style: ${style}`);
-      
-      // Create the client
-      const client = new Anthropic({
-        apiKey: apiKey,
-        dangerouslyAllowBrowser: true,
-      });
-      
-      // Set temperature based on style
-      const temperature = style === 'creative' ? 0.9 : (style === 'precise' ? 0.3 : 0.5);
-      
-      // Create the messages request
-      const message = await client.messages.create({
-        model: model,
-        max_tokens: 1000,
-        temperature: temperature,
-        messages: [
-          { role: "user", content: userInput }
-        ],
-        system: systemPrompt
-      });
-      
-      console.log("API Response:", message);
-      
-      // Extract the response text
-      if (message.content?.[0]?.type === 'text') {
-        const result = message.content[0].text;
+      const result = await callClaudeAPI(text, config);
+      if (typeof result === 'string') {
         setResponse(result);
-        return result;
-      }
-      
-      // If first content is not text, find first text block
-      const textBlock = message.content?.find(block => block.type === 'text');
-      if (textBlock?.type === 'text') {
-        const result = textBlock.text;
-        setResponse(result);
-        return result;
-      }
-      
-      const noResponseMessage = 'No text response from Claude';
-      setResponse(noResponseMessage);
-      return noResponseMessage;
-    } catch (error: any) {
-      console.error('Error analyzing text:', error);
-      
-      // Provide more helpful error messages for common issues
-      if (error.message?.includes('authentication_error') || error.status === 401) {
-        setError('Authentication failed: Your organization may not allow browser requests. Try using a proxy or server-side API calls.');
-      } else if (error.message?.includes('CORS')) {
-        setError('CORS error: Your organization may not allow browser requests. Try using a proxy or server-side API calls.');
       } else {
-        setError(error.message || 'An error occurred');
+        // Handle the case where result might not be a string
+        setResponse(String(result) || '');
       }
+    } catch (err: any) {
+      setError(err.message || 'Analysis failed');
     } finally {
       setLoading(false);
     }
-  }, [apiKey, model, style, systemPrompt]);
+  }, [config]);
 
-  return {
-    loading,
-    error,
-    response,
-    analyzeText
-  };
+  return { inputText, response, loading, error, analyzeText, setInputText };
 }

@@ -1,9 +1,8 @@
-// Background script for Claude on Chrome
+// Track tabs with loaded content script
+const contentScriptTabs = new Set<number>();
 
-// Setup context menus when extension is installed
+// Setup context menus on install
 chrome.runtime.onInstalled.addListener(() => {
-  console.log("Extension installed, setting up context menus");
-  
   chrome.contextMenus.create({
     id: 'analyzeSelection',
     title: 'Analyze with Claude', 
@@ -12,82 +11,76 @@ chrome.runtime.onInstalled.addListener(() => {
   
   chrome.contextMenus.create({
     id: 'analyzePage',
-    title: 'Analyze Page with Claude', 
+    title: 'Analyze page with Claude', 
     contexts: ['page']
   });
 });
 
-// Listen for messages from content script
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log("Background received message:", request);
-  
-  if (request.type === 'analyzeSelection' || request.type === 'analyzePage') {
-    // Store the data for when popup opens
-    chrome.storage.local.set({ pendingAnalysis: request.data }, () => {
-      console.log("Stored pending analysis data:", request.data.substring(0, 100) + "...");
-    });
-    
-    // Try to forward the message to any open popup
-    chrome.runtime.sendMessage(request)
-      .catch(error => {
-        console.log("Error forwarding message to popup, it might not be open:", error);
-      });
-      
-    sendResponse({ success: true });
-  } else if (request.highlightedText !== undefined) {
-    console.log("Received highlighted text in background:", request.highlightedText);
-    
-    // Store highlighted text for when popup opens
-    if (request.highlightedText) {
-      chrome.storage.local.set({ pendingAnalysis: request.highlightedText }, () => {
-        console.log("Stored highlighted text for analysis");
-      });
-    }
-    
-    // Try to forward to popup if open
-    chrome.runtime.sendMessage(request)
-      .catch(error => {
-        console.log("Error forwarding highlighted text to popup:", error);
-      });
-      
-    sendResponse({ received: true });
+// Handle content script ready messages
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message.action === 'ready' && sender.tab?.id) {
+    contentScriptTabs.add(sender.tab.id);
   }
   
-  // Return true to indicate we'll send a response asynchronously
+  // Pass any analysis data to storage for popup
+  if (message.type === 'analyzeSelection' || message.type === 'analyzePage') {
+    chrome.storage.local.set({ pendingAnalysis: message.data });
+  }
+  
   return true;
 });
 
-// Handle context menu clicks
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-  console.log("Context menu clicked:", info.menuItemId);
+// Ensure content script is loaded
+async function ensureContentScript(tabId: number): Promise<void> {
+  if (contentScriptTabs.has(tabId)) return;
   
-  if (!tab || !tab.id) {
-    console.error("No active tab found");
-    return;
+  try {
+    // Try pinging first
+    await chrome.tabs.sendMessage(tabId, { action: 'ping' });
+    contentScriptTabs.add(tabId);
+  } catch (error) {
+    // Inject content script if not loaded
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['content.js']
+    });
+    
+    // Brief delay for initialization
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
+}
+
+// Handle context menu clicks
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (!tab?.id) return;
   
-  if (info.menuItemId === 'analyzeSelection') {
-    // Store the selection text for the popup to use
-    if (info.selectionText) {
-      console.log("Storing selection for analysis:", info.selectionText);
-      chrome.storage.local.set({ pendingAnalysis: info.selectionText }, () => {
-        // Open the popup after storage is set
-        chrome.action.openPopup();
-      });
+  try {
+    // Selection analysis (use context menu's selection text directly)
+    if (info.menuItemId === 'analyzeSelection' && info.selectionText) {
+      chrome.storage.local.set({ pendingAnalysis: info.selectionText });
+      chrome.action.openPopup();
+      return;
     }
-  } else if (info.menuItemId === 'analyzePage') {
-    console.log("Sending analyzePage message to tab:", tab.id);
-    // For page analysis, we'll need to get the content via the content script
-    chrome.tabs.sendMessage(tab.id, {action: 'analyzePage'})
-      .then(response => {
-        console.log("Received response from content script:", response);
-        // Open the popup after we've received confirmation from the content script
-        if (response && response.success) {
+    
+    // Page analysis
+    if (info.menuItemId === 'analyzePage') {
+      await ensureContentScript(tab.id);
+      
+      try {
+        const response = await chrome.tabs.sendMessage(tab.id, { action: 'getPageContent' });
+        if (response?.text) {
+          chrome.storage.local.set({ pendingAnalysis: response.text });
           chrome.action.openPopup();
         }
-      })
-      .catch(error => {
-        console.error("Error sending message to tab:", error);
-      });
+      } catch (error) {
+        // Fallback: Use tab title and URL
+        const tabInfo = await chrome.tabs.get(tab.id);
+        const fallbackText = `URL: ${tabInfo.url}\nTitle: ${tabInfo.title}\n\nCould not access page content. This may be due to browser restrictions.`;
+        chrome.storage.local.set({ pendingAnalysis: fallbackText });
+        chrome.action.openPopup();
+      }
+    }
+  } catch (error) {
+    console.error("Error in context menu handler:", error);
   }
 });
