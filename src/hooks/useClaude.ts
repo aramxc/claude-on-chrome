@@ -1,4 +1,4 @@
-import { Anthropic } from '@anthropic-ai/sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import { useState, useCallback } from 'react';
 
 interface UseClaudeApiOptions {
@@ -43,10 +43,14 @@ export function useClaude({
         dangerouslyAllowBrowser: true,
       });
       
+      // Set temperature based on style
+      const temperature = style === 'creative' ? 0.9 : (style === 'precise' ? 0.3 : 0.5);
+      
       // Create the messages request
       const message = await client.messages.create({
         model: model,
         max_tokens: 1000,
+        temperature: temperature,
         messages: [
           { role: "user", content: userInput }
         ],
@@ -56,28 +60,34 @@ export function useClaude({
       console.log("API Response:", message);
       
       // Extract the response text
-      let result = 'No text response from Claude';
-      
-      if (message.content && message.content.length > 0) {
-        const firstContent = message.content[0];
-        
-        if (firstContent.type === 'text') {
-          result = firstContent.text;
-        } else {
-          console.warn('First content block is not text:', firstContent);
-          
-          const textBlock = message.content.find(block => block.type === 'text');
-          if (textBlock && 'text' in textBlock) {
-            result = textBlock.text;
-          }
-        }
+      if (message.content?.[0]?.type === 'text') {
+        const result = message.content[0].text;
+        setResponse(result);
+        return result;
       }
       
-      setResponse(result);
-      return result;
+      // If first content is not text, find first text block
+      const textBlock = message.content?.find(block => block.type === 'text');
+      if (textBlock?.type === 'text') {
+        const result = textBlock.text;
+        setResponse(result);
+        return result;
+      }
+      
+      const noResponseMessage = 'No text response from Claude';
+      setResponse(noResponseMessage);
+      return noResponseMessage;
     } catch (error: any) {
       console.error('Error analyzing text:', error);
-      setError(error.message || 'An error occurred');
+      
+      // Provide more helpful error messages for common issues
+      if (error.message?.includes('authentication_error') || error.status === 401) {
+        setError('Authentication failed: Your organization may not allow browser requests. Try using a proxy or server-side API calls.');
+      } else if (error.message?.includes('CORS')) {
+        setError('CORS error: Your organization may not allow browser requests. Try using a proxy or server-side API calls.');
+      } else {
+        setError(error.message || 'An error occurred');
+      }
     } finally {
       setLoading(false);
     }

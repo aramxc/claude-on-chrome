@@ -19,12 +19,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Limit text length to avoid overwhelming the API
     const truncatedText = pageText.substring(0, 10000);
     
-    chrome.runtime.sendMessage({
-      type: 'analyzePage', 
-      data: truncatedText
+    // Store the data directly to ensure it's available when popup opens
+    chrome.storage.local.set({ pendingAnalysis: truncatedText }, () => {
+      console.log("Stored page content for analysis");
+      
+      // Also send message to any open popup
+      chrome.runtime.sendMessage({
+        type: 'analyzePage', 
+        data: truncatedText
+      }).catch(error => {
+        console.log("Error forwarding to popup (might not be open):", error);
+      });
+      
+      sendResponse({success: true});
     });
-    
-    sendResponse({success: true});
   } 
   else if (message.getHighlightedText) {
     const selection = window.getSelection()?.toString() || '';

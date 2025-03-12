@@ -8,14 +8,19 @@
     "128": "public/assets/brain_128.png"
   },
   "permissions": [
-    "activeTab",
+    "contextMenus",
     "storage",
-    "contextMenus"
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
   ],
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["dist/content.js"]
+      "js": ["dist/content.js"],
+      "run_at": "document_end"
     }
   ],
  "content_security_policy": {

@@ -79,13 +79,15 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     console.log("Sending analyzePage message to tab:", tab.id);
     // For page analysis, we'll need to get the content via the content script
     chrome.tabs.sendMessage(tab.id, {action: 'analyzePage'})
+      .then(response => {
+        console.log("Received response from content script:", response);
+        // Open the popup after we've received confirmation from the content script
+        if (response && response.success) {
+          chrome.action.openPopup();
+        }
+      })
       .catch(error => {
         console.error("Error sending message to tab:", error);
       });
-    
-    // Open the popup
-    setTimeout(() => {
-      chrome.action.openPopup();
-    }, 100); // Small delay to allow content script to process
   }
 });

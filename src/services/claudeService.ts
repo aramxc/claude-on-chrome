@@ -23,6 +23,7 @@ export async function analyzeText(
       const message = await client.messages.create({
         model: modelName,
         max_tokens: 1000,
+        temperature: temperature,
         messages: [
           { role: "user", content: userInput }
         ],
