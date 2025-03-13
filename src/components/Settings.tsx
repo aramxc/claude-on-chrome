@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 export const SYSTEM_PROMPTS = {
   analyze: "Analyze this in detail: provide comprehensive insights, highlight key themes, explain implications, and include relevant context that would help understand the content better. Be thorough in your analysis while also minimizing tokens used.",
   tldr: "Summarize the key points of this content: be concise in your summary,capturing the essential information while eliminating unnecessary details. Focus on the main ideas and conclusions. Keep it brief but comprehensive, aiming to minimize tokens used.",
+  custom: "Summarize this in the voice of Jon Stewart, a comedian who makes a lot of money off of satirizing the news."
 };
 
 interface SettingsProps {
@@ -35,14 +36,7 @@ const Settings: React.FC<SettingsProps> = ({
   // Handle prompt button clicks
   const handlePromptSelect = (type: 'analyze' | 'tldr' | 'custom') => {
     setSelectedPromptType(type);
-    if (type === 'custom') {
-      if (selectedPromptType !== 'custom') {
-        setSystemPromptInput('');
-      }
-    } else {
-      // For analyze/tldr, set the predefined prompt
-      setSystemPromptInput(SYSTEM_PROMPTS[type]);
-    }
+    setSystemPromptInput(SYSTEM_PROMPTS[type]);
   };
 
   const handleSave = () => {
