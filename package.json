@@ -12,8 +12,10 @@
   "description": "",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@tailwindcss/typography": "^0.5.16",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-markdown": "^10.1.0",
     "typescript": "^5.2.2"
   },
   "devDependencies": {

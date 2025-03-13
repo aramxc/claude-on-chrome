@@ -1,8 +1,5 @@
-import { ClaudeConfig } from '../types/claude';
+import { ClaudeConfig } from "../types/claude";
 
-/**
- * Call Claude API to analyze text
- */
 export async function analyzeText(
   text: string,
   config: ClaudeConfig
@@ -15,8 +12,8 @@ export async function analyzeText(
     throw new Error('No text to analyze');
   }
   
-  
   try {
+    // Send message to background script to call Claude API
     const response = await chrome.runtime.sendMessage({
       action: 'callClaudeAPI',
       payload: {
@@ -43,4 +40,26 @@ export async function analyzeText(
     }
     throw error;
   }
+}
+
+/**
+ * Get usage history from local storage
+ */
+export async function getUsageHistory(): Promise<any[]> {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(['usageHistory'], (data) => {
+      resolve(data.usageHistory || []);
+    });
+  });
+}
+
+/**
+ * Get last usage information
+ */
+export async function getLastUsage(): Promise<any> {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(['lastUsage'], (data) => {
+      resolve(data.lastUsage || null);
+    });
+  });
 }

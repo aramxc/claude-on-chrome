@@ -12,11 +12,18 @@ function getSelectedText(): string {
 
 // Extract page content intelligently
 function getPageContent(): string {
-  // Try to find main content container
-  const mainContent = document.querySelector('main, article, #content, .content');
+  // Try to find the main element first
+  const mainElement = document.querySelector('main');
   
-  if (mainContent) {
-    return mainContent.textContent || '';
+  if (mainElement && mainElement.textContent && mainElement.textContent.trim().length > 100) {
+    return mainElement.textContent.trim();
+  }
+  
+  // If no main element or it's too short, try article or content containers
+  const contentElement = document.querySelector('article, #content, .content, [role="main"]');
+  
+  if (contentElement && contentElement.textContent) {
+    return contentElement.textContent.trim();
   }
   
   // Fallback: Remove navigation, etc. from body

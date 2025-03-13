@@ -1,5 +1,11 @@
 import React, { useState } from 'react';
 
+// Same shared system prompts
+export const SYSTEM_PROMPTS = {
+  analyze: "Analyze this in detail: provide comprehensive insights, highlight key themes, explain implications, and include relevant context that would help understand the content better. Be thorough in your analysis while also minimizing tokens used.",
+  tldr: "Summarize the key points of this content: be concise in your summary,capturing the essential information while eliminating unnecessary details. Focus on the main ideas and conclusions. Keep it brief but comprehensive, aiming to minimize tokens used.",
+};
+
 interface SettingsProps {
   apiKey: string;
   model: string;
@@ -19,7 +25,25 @@ const Settings: React.FC<SettingsProps> = ({
   const [modelInput, setModelInput] = useState(model);
   const [styleInput, setStyleInput] = useState(style);
   const [systemPromptInput, setSystemPromptInput] = useState(systemPrompt);
+  const [selectedPromptType, setSelectedPromptType] = useState(() => {
+    if (systemPrompt.includes("Analyze this in detail")) return "analyze";
+    if (systemPrompt.includes("Summarize the key points")) return "tldr";
+    return "custom";
+  });
   const [saveStatus, setSaveStatus] = useState('');
+
+  // Handle prompt button clicks
+  const handlePromptSelect = (type: 'analyze' | 'tldr' | 'custom') => {
+    setSelectedPromptType(type);
+    if (type === 'custom') {
+      if (selectedPromptType !== 'custom') {
+        setSystemPromptInput('');
+      }
+    } else {
+      // For analyze/tldr, set the predefined prompt
+      setSystemPromptInput(SYSTEM_PROMPTS[type]);
+    }
+  };
 
   const handleSave = () => {
     setApiKey(apiKeyInput);
@@ -32,7 +56,8 @@ const Settings: React.FC<SettingsProps> = ({
       apiKey: apiKeyInput,
       model: modelInput,
       style: styleInput,
-      systemPrompt: systemPromptInput
+      systemPrompt: systemPromptInput,
+      promptType: selectedPromptType
     }, () => {
       setSaveStatus('Settings saved');
       setTimeout(() => setSaveStatus(''), 2000);
@@ -40,10 +65,10 @@ const Settings: React.FC<SettingsProps> = ({
   };
 
   return (
-    <div className="flex-1 overflow-auto p-4">
+    <div className="flex-1 overflow-auto p-4 flex flex-col h-full">
       <h2 className="text-xl font-bold mb-4">Settings</h2>
       
-      <div className="space-y-4">
+      <div className="space-y-4 flex-grow">
         <div>
           <label className="block text-sm font-medium text-gray-400 mb-1">
             Anthropic API Key
@@ -87,50 +112,54 @@ const Settings: React.FC<SettingsProps> = ({
           </select>
         </div>
         
-        <div>
+        <div className="flex-grow flex flex-col">
           <label className="block text-sm font-medium text-gray-400 mb-1">
             System Prompt
           </label>
-          <div className="grid grid-cols-3 gap-2 mb-2">
+          <div className="grid grid-cols-3 gap-2 mb-6">
             <button 
               className={`px-2 py-1 text-sm rounded ${
-                systemPromptInput === 'Analyze this in detail:' 
+                selectedPromptType === 'analyze' 
                   ? 'bg-blue-600 text-white' 
                   : 'bg-gray-800 text-gray-300'
               }`}
-              onClick={() => setSystemPromptInput('Analyze this in detail:')}
+              onClick={() => handlePromptSelect('analyze')}
             >
               Analyze
             </button>
             <button 
               className={`px-2 py-1 text-sm rounded ${
-                systemPromptInput === 'Summarize the key points of this:' 
+                selectedPromptType === 'tldr' 
                   ? 'bg-blue-600 text-white' 
                   : 'bg-gray-800 text-gray-300'
               }`}
-              onClick={() => setSystemPromptInput('Summarize the key points of this:')}
+              onClick={() => handlePromptSelect('tldr')}
             >
-              Summarize
+              TLDR
             </button>
             <button 
               className={`px-2 py-1 text-sm rounded ${
-                systemPromptInput === systemPromptInput
+                selectedPromptType === 'custom' 
                   ? 'bg-blue-600 text-white' 
                   : 'bg-gray-800 text-gray-300'
               }`}
-              onClick={() => setSystemPromptInput(systemPromptInput)}
+              onClick={() => handlePromptSelect('custom')}
             >
               Custom
             </button>
           </div>
           <textarea
             value={systemPromptInput}
-            onChange={(e) => setSystemPromptInput(e.target.value)}
-            className="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-            rows={3}
+            onChange={(e) => {
+              setSystemPromptInput(e.target.value);
+              setSelectedPromptType('custom');
+            }}
+            className="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-blue-500 flex-grow min-h-[100px]"
           />
         </div>
-        
+      </div>
+      
+      <div className="mt-4">
         <button 
           onClick={handleSave}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors"

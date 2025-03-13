@@ -1,4 +1,4 @@
-import { Anthropic } from '@anthropic-ai/sdk';
+import { cleanupOldCaches } from './services/cacheService';
 
 // Track tabs with loaded content script
 const contentScriptTabs = new Set<number>();
@@ -152,4 +152,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   
   return true;
+});
+
+// Run cleanup on extension startup
+cleanupOldCaches();
+
+// Also set up periodic cleanup
+chrome.alarms.create('cacheCleanup', { periodInMinutes: 60 * 24 }); // Once per day
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'cacheCleanup') {
+    cleanupOldCaches();
+  }
 });

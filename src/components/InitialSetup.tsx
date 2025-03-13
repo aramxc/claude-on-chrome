@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { SYSTEM_PROMPTS } from './Settings';
 
 interface InitialSetupProps {
   setApiKey: (key: string) => void;
@@ -13,7 +14,8 @@ const InitialSetup: React.FC<InitialSetupProps> = ({
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [modelInput, setModelInput] = useState('claude-3-opus-20240229');
   const [styleInput, setStyleInput] = useState('default');
-  const [systemPromptInput, setSystemPromptInput] = useState('Analyze this in detail:');
+  const [systemPromptInput, setSystemPromptInput] = useState(SYSTEM_PROMPTS.tldr);
+  const [selectedPromptType, setSelectedPromptType] = useState('tldr');
 
   const handleSave = () => {
     setApiKey(apiKeyInput);

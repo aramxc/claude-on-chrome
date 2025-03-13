@@ -27,3 +27,30 @@
 body {
   @apply bg-dark text-gray-100;
 }
+
+/* Custom Scrollbar Styles */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #000000;
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3b82f6; /* Blue color matching your theme */
+  border-radius: 8px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2563eb;
+}
+
+/* For Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3b82f6 #000000;
+}
