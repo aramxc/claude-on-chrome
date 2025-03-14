@@ -2,6 +2,8 @@
 
 A powerful Chrome extension that integrates Anthropic's Claude AI directly into your browsing experience. Analyze text selections or entire web pages with customizable prompts, track token usage costs, and get instant AI-powered insights without leaving your browser.
 
+[Demo Video](https://youtu.be/vb2UpbOv3KI)
+
 ## Features
 
 - **Text Analysis**: Analyze highlighted text or full web pages with Claude AI
