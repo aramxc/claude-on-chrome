@@ -8,6 +8,8 @@ export interface ModelRates {
     outputTokens: number;
     timestamp: number;
     model: string;
+    cost: number;
+    formattedCost: string;
   }
   
   export interface DailyUsage {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getUsageHistory } from '../services/claudeService';
-import { UsageRecord, UsageSummary, MODEL_RATES } from '../types/usage';
+import { UsageRecord, UsageSummary } from '../types/usage';
 
 const UsageTracking: React.FC = () => {
   const [usageHistory, setUsageHistory] = useState<UsageRecord[]>([]);
@@ -8,6 +8,7 @@ const UsageTracking: React.FC = () => {
   const [timeFrame, setTimeFrame] = useState<'week' | 'month' | 'all'>('week');
   const [accountCredits, setAccountCredits] = useState<number>(0);
   const [inputCredits, setInputCredits] = useState<string>('');
+  const [resetConfirm, setResetConfirm] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -50,67 +51,130 @@ const UsageTracking: React.FC = () => {
     };
 
     for (const record of filteredHistory) {
-      const { inputTokens, outputTokens, timestamp, model } = record;
+      const { inputTokens, outputTokens, timestamp, model, cost } = record;
       
       // Get the base model name without version
       const baseModel = model.split('-').slice(0, 3).join('-');
       
-      // Use the correct rates for the model or fallback to opus
-      const modelRates = MODEL_RATES[baseModel] || MODEL_RATES['claude-3-opus'];
-      
-      const inputCost = inputTokens * modelRates.input / 1000000; // Convert from per million
-      const outputCost = outputTokens * modelRates.output / 1000000; // Convert from per million
-      const recordSpend = inputCost + outputCost;
-      
+      // Update total counts
       summary.totalInputTokens += inputTokens;
       summary.totalOutputTokens += outputTokens;
-      summary.totalSpend += recordSpend;
-      summary.accountBalance -= recordSpend;
+      summary.totalSpend += cost;
       
-      const day = new Date(timestamp).toISOString().split('T')[0];
-      if (!summary.usageByDay[day]) {
-        summary.usageByDay[day] = {
-          inputTokens: 0,
-          outputTokens: 0,
-          spend: 0,
-          inputRate: modelRates.input,
-          outputRate: modelRates.output
-        };
-      }
-      
-      summary.usageByDay[day].inputTokens += inputTokens;
-      summary.usageByDay[day].outputTokens += outputTokens;
-      summary.usageByDay[day].spend += recordSpend;
-      
-      // Remove model version from model name in response
-      const modelKey = baseModel;
-      
-      if (!summary.usageByModel[modelKey]) {
-        summary.usageByModel[modelKey] = {
+      // Update by model
+      if (!summary.usageByModel[baseModel]) {
+        summary.usageByModel[baseModel] = {
           inputTokens: 0,
           outputTokens: 0,
           spend: 0
         };
       }
+      summary.usageByModel[baseModel].inputTokens += inputTokens;
+      summary.usageByModel[baseModel].outputTokens += outputTokens;
+      summary.usageByModel[baseModel].spend += cost;
       
-      summary.usageByModel[modelKey].inputTokens += inputTokens;
-      summary.usageByModel[modelKey].outputTokens += outputTokens;
-      summary.usageByModel[modelKey].spend += recordSpend;
+      // Update by day
+      const date = new Date(timestamp);
+      const day = date.toISOString().split('T')[0];
+      
+      if (!summary.usageByDay[day]) {
+        summary.usageByDay[day] = {
+          inputTokens: 0,
+          outputTokens: 0,
+          spend: 0,
+          inputRate: 0,
+          outputRate: 0
+        };
+      }
+      summary.usageByDay[day].inputTokens += inputTokens;
+      summary.usageByDay[day].outputTokens += outputTokens;
+      summary.usageByDay[day].spend += cost;
     }
-
+    
+    // Calculate account balance
+    summary.accountBalance = Math.max(0, accountCredits - summary.totalSpend);
+    summary.totalCost = summary.totalSpend;
+    
     setSummary(summary);
   }, [usageHistory, timeFrame, accountCredits]);
 
-  const updateAccountCredits = () => {
-    const credits = parseFloat(inputCredits);
-    if (!isNaN(credits)) {
-      setAccountCredits(credits);
-      chrome.storage.sync.set({ accountCredits: credits });
+  const handleSaveCredits = () => {
+    const credits = parseFloat(inputCredits) || 0;
+    setAccountCredits(credits);
+    chrome.storage.sync.set({ accountCredits: credits });
+  };
+
+  const handleReset = () => {
+    if (!resetConfirm) {
+      setResetConfirm(true);
+      return;
     }
+
+    // Clear usage history
+    chrome.storage.local.remove(['usageHistory', 'lastResponse', 'lastInputText'], () => {
+      // Clear all cached responses
+      chrome.storage.local.get(null, (items) => {
+        const cacheKeys = Object.keys(items).filter(key => 
+          key.startsWith('claude-cache-') || key.startsWith('analysis-')
+        );
+        
+        if (cacheKeys.length > 0) {
+          chrome.storage.local.remove(cacheKeys);
+        }
+        
+        // Also clear account credits to force initial setup on next open
+        chrome.storage.sync.remove(['accountCredits'], () => {
+          setUsageHistory([]);
+          setSummary(null);
+          setAccountCredits(0);
+          setInputCredits('0');
+          setResetConfirm(false);
+        });
+      });
+    });
+  };
+
+  const cancelReset = () => {
+    setResetConfirm(false);
   };
 
   return (
     <div className="flex-1 overflow-auto p-4">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold">Usage Tracking</h2>
+        <div className="flex space-x-2">
+          {resetConfirm ? (
+            <>
+              <button 
+                onClick={handleReset}
+                className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded-md flex items-center"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Confirm
+              </button>
+              <button 
+                onClick={cancelReset}
+                className="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-md"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button 
+              onClick={handleReset}
+              className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded-md flex items-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Reset
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="mb-3 flex items-center">
         <div className="rounded-full p-1 mr-2">
           <img src="assets/brain_128.png" className="h-8 w-8" alt="Brain icon" />
@@ -149,13 +213,13 @@ const UsageTracking: React.FC = () => {
             </label>
             <div className="flex items-center">
               <input
-                type="text"
+                type=""
                 value={inputCredits}
                 onChange={(e) => setInputCredits(e.target.value)}
                 className="w-32 bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-blue-500 mr-2"
               />
               <button
-                onClick={updateAccountCredits}
+                onClick={handleSaveCredits}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md"
               >
                 Update

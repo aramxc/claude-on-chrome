@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useClaude } from '../hooks/useClaude';
 import { ClaudeConfig } from '../types/claude';
 import ReactMarkdown from 'react-markdown';
+import { calculateCost } from '../utils/costCalculator';
 
 export interface MainProps {
   config: ClaudeConfig;
@@ -21,29 +22,13 @@ const Main: React.FC<MainProps> = ({ config }) => {
 
   // Calculate cost estimate when response changes
   useEffect(() => {
-    if (response) {
-      const inputCost = response.usage.input_tokens * 0.00001;
-      const outputCost = response.usage.output_tokens * 0.00003;
-      const totalCost = inputCost + outputCost;
-      
-      // Format cost for display
-      const formattedCost = totalCost < 0.01
-        ? `${(totalCost * 100).toFixed(2)}¢` 
-        : `$${totalCost.toFixed(2)}`;
-      
-      setCostEstimate(formattedCost);
-      
-      // Save usage data to storage
-      chrome.storage.local.get(['usageHistory'], (result) => {
-        const usageHistory = result.usageHistory || [];
-        usageHistory.push({
-          inputTokens: response.usage.input_tokens,
-          outputTokens: response.usage.output_tokens,
-          timestamp: Date.now(),
-          model: response.model
-        });
-        chrome.storage.local.set({ usageHistory });
-      });
+    if (response && response.usage) {
+      const costBreakdown = calculateCost(
+        response.model,
+        response.usage.input_tokens,
+        response.usage.output_tokens
+      );
+      setCostEstimate(costBreakdown.formattedCost);
     }
   }, [response]);
 

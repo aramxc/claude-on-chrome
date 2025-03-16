@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 // Same shared system prompts
 export const SYSTEM_PROMPTS = {
@@ -32,6 +32,7 @@ const Settings: React.FC<SettingsProps> = ({
     return "custom";
   });
   const [saveStatus, setSaveStatus] = useState('');
+  const [isKeyEditable, setIsKeyEditable] = useState(false);
 
   // Handle prompt button clicks
   const handlePromptSelect = (type: 'analyze' | 'tldr' | 'custom') => {
@@ -54,6 +55,7 @@ const Settings: React.FC<SettingsProps> = ({
       promptType: selectedPromptType
     }, () => {
       setSaveStatus('Settings saved');
+      setIsKeyEditable(false);
       setTimeout(() => setSaveStatus(''), 2000);
     });
   };
@@ -67,13 +69,24 @@ const Settings: React.FC<SettingsProps> = ({
           <label className="block text-sm font-medium text-gray-400 mb-1">
             Anthropic API Key
           </label>
-          <input
-            type="password"
-            value={apiKeyInput}
-            onChange={(e) => setApiKeyInput(e.target.value)}
-            className="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-            placeholder="Enter your API key"
-          />
+          <div className="relative">
+            <input
+              type="password"
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+              disabled={!isKeyEditable}
+              className={`w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-blue-500 ${!isKeyEditable ? 'opacity-70' : ''}`}
+              placeholder="Enter your API key"
+            />
+            {apiKey && (
+              <button 
+                onClick={() => setIsKeyEditable(!isKeyEditable)}
+                className="absolute right-2 top-2 text-xs text-blue-400 hover:text-blue-300"
+              >
+                {isKeyEditable ? 'Cancel' : 'Change'}
+              </button>
+            )}
+          </div>
         </div>
         
         <div>
@@ -85,9 +98,9 @@ const Settings: React.FC<SettingsProps> = ({
             onChange={(e) => setModelInput(e.target.value)}
             className="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
-            <option value="claude-3-opus-20240229">Claude 3 Opus</option>
-            <option value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet</option>
             <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+            <option value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet</option>
+            <option value="claude-3-opus-20240229">Claude 3 Opus</option>
           </select>
         </div>
         

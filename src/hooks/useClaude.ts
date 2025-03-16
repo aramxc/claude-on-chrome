@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { analyzeText as callClaudeAPI } from '../services/claudeService';
 import { ClaudeConfig, ClaudeResponse } from '../types/claude';
+import { calculateCost } from '../utils/costCalculator';
 
 
 
@@ -66,53 +67,7 @@ export function useClaude(config: ClaudeConfig) {
     return `claude-cache-${config.model}-${config.style}-${encodeURIComponent(text.substring(0, 100))}`;
   }, []);
   
-  // Check cache for previous responses on mount and when input changes
-  useEffect(() => {
-    if (!inputText) return;
-    
-    const key = createCacheKey(inputText, config);
-    setCacheKey(key);
-    
-    // Save current input text to storage
-    chrome.storage.local.set({ lastInputText: inputText });
-    
-    // Try to load from cache
-    chrome.storage.local.get([key], (result) => {
-      if (result[key]) {
-        console.log('Loading from cache');
-        setResponse(result[key].response);
-        // Save to lastResponse for persistence between tab switches
-        chrome.storage.local.set({ lastResponse: result[key].response });
-      } else if (config.apiKey) {
-        // Not in cache, so analyze
-        analyzeTextWithCache(inputText);
-      }
-    });
-  }, [inputText, config.apiKey, config.model, config.style]);
-  
-  // Check for pending analysis on mount
-  useEffect(() => {
-    chrome.storage.local.get(['pendingAnalysis'], (result) => {
-      if (result.pendingAnalysis) {
-        setInputText(result.pendingAnalysis);
-        chrome.storage.local.remove(['pendingAnalysis']);
-      }
-    });
-    
-    // Listen for messages from background/content scripts
-    const messageListener = (message: any) => {
-      if ((message.type === 'analyzeSelection' || message.type === 'analyzePage') && message.data) {
-        setInputText(message.data);
-      } else if (message.highlightedText) {
-        setInputText(message.highlightedText);
-      }
-    };
-    
-    chrome.runtime.onMessage.addListener(messageListener);
-    return () => chrome.runtime.onMessage.removeListener(messageListener);
-  }, []);
-
-  // Analyze text with Claude and cache results, including usage data
+  // Analyze text with Claude and cache results
   const analyzeTextWithCache = useCallback(async (text: string) => {
     if (!config.apiKey || !text) return;
     
@@ -134,14 +89,71 @@ export function useClaude(config: ClaudeConfig) {
           style: config.style
         },
         // Also save as lastResponse for persistence between tab switches
-        lastResponse: result
+        lastResponse: result,
+        lastInputText: text
       });
+      
+      // Track usage data only when we get a new API response
+      chrome.storage.local.get(['usageHistory'], (data) => {
+        const usageHistory = data.usageHistory || [];
+        
+        // Calculate cost once
+        const costBreakdown = calculateCost(
+          result.model,
+          result.usage.input_tokens,
+          result.usage.output_tokens
+        );
+        
+        usageHistory.push({
+          inputTokens: result.usage.input_tokens,
+          outputTokens: result.usage.output_tokens,
+          timestamp: Date.now(),
+          model: result.model,
+          cost: costBreakdown.totalCost,
+          formattedCost: costBreakdown.formattedCost
+        });
+        
+        chrome.storage.local.set({ usageHistory });
+      });
+      
     } catch (err: any) {
       setError(err.message || 'Analysis failed');
     } finally {
       setLoading(false);
     }
   }, [config, createCacheKey]);
+
+  // Check cache and analyze text when input changes
+  useEffect(() => {
+    if (!inputText || !config.apiKey) return;
+    
+    const key = createCacheKey(inputText, config);
+    setCacheKey(key);
+    
+    // Check cache first
+    chrome.storage.local.get([key], async (result) => {
+      if (result[key] && result[key].response) {
+        console.log('Using cached response');
+        setResponse(result[key].response);
+      } else {
+        // Not in cache, call API
+        analyzeTextWithCache(inputText);
+      }
+    });
+  }, [inputText, config, analyzeTextWithCache, createCacheKey]);
+
+  // Check for pending analysis
+  useEffect(() => {
+    chrome.storage.local.get(['pendingAnalysis'], (result) => {
+      if (result.pendingAnalysis) {
+        // Set the input text to the pending analysis
+        setInputText(result.pendingAnalysis);
+        
+        // Clear the pending analysis to avoid reprocessing
+        chrome.storage.local.remove(['pendingAnalysis']);
+      }
+    });
+  }, []);
 
   // Public API for component
   const analyzeText = useCallback((text: string) => {

@@ -9,16 +9,19 @@ const App: React.FC = () => {
   const [model, setModel] = useState('claude-3-opus-20240229');
   const [style, setStyle] = useState('default');
   const [systemPrompt, setSystemPrompt] = useState('Analyze this in detail:');
+  const [accountCredits, setAccountCredits] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState('main');
   const [isLoading, setIsLoading] = useState(true);
   
   useEffect(() => {
     // Load settings from storage
-    chrome.storage.sync.get(['apiKey', 'model', 'style', 'systemPrompt'], (result) => {
+    chrome.storage.sync.get(['apiKey', 'model', 'style', 'systemPrompt', 'accountCredits'], (result) => {
       if (result.apiKey) setApiKey(result.apiKey);
       if (result.model) setModel(result.model); 
       if (result.style) setStyle(result.style);
       if (result.systemPrompt) setSystemPrompt(result.systemPrompt);
+      // Explicitly set accountCredits to null if not found
+      setAccountCredits(result.accountCredits !== undefined ? result.accountCredits : null);
       setIsLoading(false);
     });
   }, []);
@@ -38,12 +41,14 @@ const App: React.FC = () => {
 
   // Determine which content to show
   const renderContent = () => {
-    if (!apiKey) {
+    // Show initial setup if either API key is missing or accountCredits is null/0/negative
+    if (!apiKey || accountCredits === null || accountCredits <= 0) {
       return <InitialSetup 
         setApiKey={setApiKey} 
         setModel={setModel} 
         setStyle={setStyle}
         setSystemPrompt={setSystemPrompt}
+        setAccountCredits={setAccountCredits}
       />;
     }
     
