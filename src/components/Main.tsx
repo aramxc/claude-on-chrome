@@ -1,8 +1,6 @@
-// Updated Main.tsx with cost estimation
 import React, { useEffect, useState } from 'react';
 import { useClaude } from '../hooks/useClaude';
 import { ClaudeConfig } from '../types/claude';
-import { estimateCost } from '../services/costEstimateService';
 import ReactMarkdown from 'react-markdown';
 
 export interface MainProps {
@@ -15,71 +13,54 @@ const Main: React.FC<MainProps> = ({ config }) => {
     response, 
     loading, 
     error, 
-    analyzeText
   } = useClaude(config);
   
   const [costEstimate, setCostEstimate] = useState<string | null>(null);
   const [isInputExpanded, setIsInputExpanded] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
 
-  // Check for highlighted text when popup opens
+  // Calculate cost estimate when response changes
   useEffect(() => {
-    if (chrome.tabs) {
-      chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
-        if (tabs[0]?.id) {
-          try {
-            // First ensure content script is loaded (communicate with background.ts)
-            await chrome.runtime.sendMessage({ 
-              action: 'ensureContentScriptLoaded', 
-              tabId: tabs[0].id 
-            });
-            
-            // Then try to get the selection
-            const response = await chrome.tabs.sendMessage(tabs[0].id, { action: 'getSelection' });
-            if (response?.text && !inputText) {
-              analyzeText(response.text);
-            }
-          } catch (err) {
-            console.log("Could not get selection: content script may not be available on this page");
-            
-            // Check if we have a pending analysis from context menu
-            chrome.storage.local.get(['pendingAnalysis'], (result) => {
-              if (result.pendingAnalysis && !inputText) {
-                analyzeText(result.pendingAnalysis);
-                // Clear after using
-                chrome.storage.local.remove(['pendingAnalysis']);
-              }
-            });
-          }
-        }
+    if (response) {
+      const inputCost = response.usage.input_tokens * 0.00001;
+      const outputCost = response.usage.output_tokens * 0.00003;
+      const totalCost = inputCost + outputCost;
+      
+      // Format cost for display
+      const formattedCost = totalCost < 0.01
+        ? `${(totalCost * 100).toFixed(2)}¢` 
+        : `$${totalCost.toFixed(2)}`;
+      
+      setCostEstimate(formattedCost);
+      
+      // Save usage data to storage
+      chrome.storage.local.get(['usageHistory'], (result) => {
+        const usageHistory = result.usageHistory || [];
+        usageHistory.push({
+          inputTokens: response.usage.input_tokens,
+          outputTokens: response.usage.output_tokens,
+          timestamp: Date.now(),
+          model: response.model
+        });
+        chrome.storage.local.set({ usageHistory });
       });
     }
-  }, [inputText, analyzeText]);
+  }, [response]);
 
-  // Calculate cost estimate when we have both input and response
-  useEffect(() => {
-    if (inputText && response) {
-      const { formattedCost } = estimateCost(inputText, response, config.model);
-      setCostEstimate(formattedCost);
-    } else {
-      setCostEstimate(null);
-    }
-  }, [inputText, response, config.model]);
-
-  // Add this helper function to get prompt type display name
+  // Get prompt type display name
   const getPromptTypeDisplay = (systemPrompt: string): string => {
     if (systemPrompt.includes("Analyze this in detail")) return "Analyze";
     if (systemPrompt.includes("Summarize the key points")) return "TLDR";
     return "Custom";
   };
 
-  // Add this function to handle copying response to clipboard
+  // Copy response to clipboard
   const copyToClipboard = () => {
     if (response) {
-      navigator.clipboard.writeText(response)
+      navigator.clipboard.writeText(response.content.reduce((acc, part) => acc + part.text, ''))
         .then(() => {
           setCopySuccess(true);
-          setTimeout(() => setCopySuccess(false), 2000); // Reset after 2 seconds
+          setTimeout(() => setCopySuccess(false), 2000);
         })
         .catch(err => {
           console.error('Failed to copy text: ', err);
@@ -93,7 +74,7 @@ const Main: React.FC<MainProps> = ({ config }) => {
         <div className="rounded-full p-1 mr-2">
           <img src="assets/brain_128.png" className="h-8 w-8" alt="Brain icon" />
         </div>
-        <h2 className="text-lg font-semibold">Claude in Chrome</h2>
+        <h2 className="text-lg font-semibold">Claude on Chrome</h2>
       </div>
       
       <div className="text-xs text-gray-500 mb-3">
@@ -207,9 +188,11 @@ const Main: React.FC<MainProps> = ({ config }) => {
                 </div>
                 <div className="bg-gray-900 rounded-md p-3 text-sm text-white">
                   <div className="prose prose-invert prose-sm max-w-none">
-                    <ReactMarkdown>
-                      {response}
-                    </ReactMarkdown>
+                    {response.content.map((part, index) => (
+                      <ReactMarkdown key={index}>
+                        {part.text}
+                      </ReactMarkdown>
+                    ))}
                   </div>
                 </div>
               </div>

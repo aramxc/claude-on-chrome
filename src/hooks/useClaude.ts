@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { analyzeText as callClaudeAPI } from '../services/claudeService';
-import { ClaudeConfig } from '../types/claude';
+import { ClaudeConfig, ClaudeResponse } from '../types/claude';
 
 
 
@@ -44,10 +44,22 @@ export function useConfig() {
  */
 export function useClaude(config: ClaudeConfig) {
   const [inputText, setInputText] = useState('');
-  const [response, setResponse] = useState('');
+  const [response, setResponse] = useState<ClaudeResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [cacheKey, setCacheKey] = useState<string | null>(null);
+  
+  // Load last response from storage on mount
+  useEffect(() => {
+    chrome.storage.local.get(['lastResponse', 'lastInputText'], (result) => {
+      if (result.lastResponse) {
+        setResponse(result.lastResponse);
+      }
+      if (result.lastInputText) {
+        setInputText(result.lastInputText);
+      }
+    });
+  }, []);
   
   // Function to create a cache key from input and config
   const createCacheKey = useCallback((text: string, config: ClaudeConfig) => {
@@ -61,12 +73,16 @@ export function useClaude(config: ClaudeConfig) {
     const key = createCacheKey(inputText, config);
     setCacheKey(key);
     
+    // Save current input text to storage
+    chrome.storage.local.set({ lastInputText: inputText });
+    
     // Try to load from cache
     chrome.storage.local.get([key], (result) => {
       if (result[key]) {
         console.log('Loading from cache');
         setResponse(result[key].response);
-        // Don't set loading to true or call API
+        // Save to lastResponse for persistence between tab switches
+        chrome.storage.local.set({ lastResponse: result[key].response });
       } else if (config.apiKey) {
         // Not in cache, so analyze
         analyzeTextWithCache(inputText);
@@ -96,7 +112,7 @@ export function useClaude(config: ClaudeConfig) {
     return () => chrome.runtime.onMessage.removeListener(messageListener);
   }, []);
 
-  //  // Analyze text with Claude and cache results
+  // Analyze text with Claude and cache results, including usage data
   const analyzeTextWithCache = useCallback(async (text: string) => {
     if (!config.apiKey || !text) return;
     
@@ -107,29 +123,19 @@ export function useClaude(config: ClaudeConfig) {
     
     try {
       const result = await callClaudeAPI(text, config);
-      if (typeof result === 'string') {
-        setResponse(result);
-        // Save to cache
-        chrome.storage.local.set({ 
-          [key]: { 
-            response: result, 
-            timestamp: Date.now(),
-            model: config.model,
-            style: config.style
-          } 
-        });
-      } else {
-        setResponse(String(result) || '');
-        // Save to cache
-        chrome.storage.local.set({ 
-          [key]: { 
-            response: String(result) || '', 
-            timestamp: Date.now(),
-            model: config.model,
-            style: config.style 
-          } 
-        });
-      }
+      setResponse(result);
+
+      // Save to cache
+      chrome.storage.local.set({ 
+        [key]: { 
+          response: result, 
+          timestamp: Date.now(),
+          model: config.model,
+          style: config.style
+        },
+        // Also save as lastResponse for persistence between tab switches
+        lastResponse: result
+      });
     } catch (err: any) {
       setError(err.message || 'Analysis failed');
     } finally {

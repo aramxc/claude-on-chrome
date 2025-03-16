@@ -1,31 +1,35 @@
-// src/components/Usage.tsx
 import React, { useState, useEffect } from 'react';
 import { getUsageHistory } from '../services/claudeService';
-import { MODEL_RATES } from '../services/costEstimateService';
-import { UsageRecord, UsageSummary } from '../types/usage';
+import { UsageRecord, UsageSummary, MODEL_RATES } from '../types/usage';
 
-// Ensure styling consistency with other tabs
-const Usage: React.FC = () => {
+const UsageTracking: React.FC = () => {
   const [usageHistory, setUsageHistory] = useState<UsageRecord[]>([]);
   const [summary, setSummary] = useState<UsageSummary | null>(null);
   const [timeFrame, setTimeFrame] = useState<'week' | 'month' | 'all'>('week');
-  
+  const [accountCredits, setAccountCredits] = useState<number>(0);
+  const [inputCredits, setInputCredits] = useState<string>('');
+
   useEffect(() => {
-    const loadUsageHistory = async () => {
+    const loadData = async () => {
       const history = await getUsageHistory();
-      setUsageHistory(history);
+      setUsageHistory(history || []);
+
+      chrome.storage.sync.get(['accountCredits'], (result) => {
+        const credits = result.accountCredits || 0;
+        setAccountCredits(credits);
+        setInputCredits(credits.toString());
+      });
     };
-    
-    loadUsageHistory();
+
+    loadData();
   }, []);
-  
+
   useEffect(() => {
     if (usageHistory.length === 0) return;
-    
-    // Filter by timeframe
+
     let filteredHistory = [...usageHistory];
     const now = Date.now();
-    
+
     if (timeFrame === 'week') {
       const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
       filteredHistory = filteredHistory.filter(record => record.timestamp >= oneWeekAgo);
@@ -33,61 +37,78 @@ const Usage: React.FC = () => {
       const oneMonthAgo = now - 30 * 24 * 60 * 60 * 1000;
       filteredHistory = filteredHistory.filter(record => record.timestamp >= oneMonthAgo);
     }
-    
-    // Calculate summary statistics
+
     const summary: UsageSummary = {
+      totalCost: 0,
       totalInputTokens: 0,
       totalOutputTokens: 0,
-      totalCost: 0,
+      totalSpend: 0,
       usageByDay: {},
-      usageByModel: {}
+      usageByModel: {},
+      accountCredits,
+      accountBalance: accountCredits,
     };
-    
+
     for (const record of filteredHistory) {
-      // Update totals
-      summary.totalInputTokens += record.inputTokens;
-      summary.totalOutputTokens += record.outputTokens;
+      const { inputTokens, outputTokens, timestamp, model } = record;
       
-      // Calculate cost
-      const modelRates = MODEL_RATES[record.model] || MODEL_RATES['claude-3-opus-20240229'];
-      const recordCost = 
-        record.inputTokens * modelRates.input + 
-        record.outputTokens * modelRates.output;
+      // Get the base model name without version
+      const baseModel = model.split('-').slice(0, 3).join('-');
       
-      summary.totalCost += recordCost;
+      // Use the correct rates for the model or fallback to opus
+      const modelRates = MODEL_RATES[baseModel] || MODEL_RATES['claude-3-opus'];
       
-      // Group by day
-      const day = new Date(record.timestamp).toISOString().split('T')[0];
+      const inputCost = inputTokens * modelRates.input / 1000000; // Convert from per million
+      const outputCost = outputTokens * modelRates.output / 1000000; // Convert from per million
+      const recordSpend = inputCost + outputCost;
+      
+      summary.totalInputTokens += inputTokens;
+      summary.totalOutputTokens += outputTokens;
+      summary.totalSpend += recordSpend;
+      summary.accountBalance -= recordSpend;
+      
+      const day = new Date(timestamp).toISOString().split('T')[0];
       if (!summary.usageByDay[day]) {
         summary.usageByDay[day] = {
           inputTokens: 0,
           outputTokens: 0,
-          cost: 0
+          spend: 0,
+          inputRate: modelRates.input,
+          outputRate: modelRates.output
         };
       }
       
-      summary.usageByDay[day].inputTokens += record.inputTokens;
-      summary.usageByDay[day].outputTokens += record.outputTokens;
-      summary.usageByDay[day].cost += recordCost;
+      summary.usageByDay[day].inputTokens += inputTokens;
+      summary.usageByDay[day].outputTokens += outputTokens;
+      summary.usageByDay[day].spend += recordSpend;
       
-      // Group by model
-      const modelKey = record.model.replace(/-\d{8}$/, '');
+      // Remove model version from model name in response
+      const modelKey = baseModel;
+      
       if (!summary.usageByModel[modelKey]) {
         summary.usageByModel[modelKey] = {
           inputTokens: 0,
           outputTokens: 0,
-          cost: 0
+          spend: 0
         };
       }
       
-      summary.usageByModel[modelKey].inputTokens += record.inputTokens;
-      summary.usageByModel[modelKey].outputTokens += record.outputTokens;
-      summary.usageByModel[modelKey].cost += recordCost;
+      summary.usageByModel[modelKey].inputTokens += inputTokens;
+      summary.usageByModel[modelKey].outputTokens += outputTokens;
+      summary.usageByModel[modelKey].spend += recordSpend;
     }
-    
+
     setSummary(summary);
-  }, [usageHistory, timeFrame]);
-  
+  }, [usageHistory, timeFrame, accountCredits]);
+
+  const updateAccountCredits = () => {
+    const credits = parseFloat(inputCredits);
+    if (!isNaN(credits)) {
+      setAccountCredits(credits);
+      chrome.storage.sync.set({ accountCredits: credits });
+    }
+  };
+
   return (
     <div className="flex-1 overflow-auto p-4">
       <div className="mb-3 flex items-center">
@@ -96,22 +117,22 @@ const Usage: React.FC = () => {
         </div>
         <h2 className="text-lg font-semibold">Usage Statistics</h2>
       </div>
-      
+
       <div className="mb-4">
         <div className="flex space-x-2">
-          <button 
+          <button
             className={`px-3 py-1 rounded text-sm ${timeFrame === 'week' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300'}`}
             onClick={() => setTimeFrame('week')}
           >
             Last 7 Days
           </button>
-          <button 
+          <button
             className={`px-3 py-1 rounded text-sm ${timeFrame === 'month' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300'}`}
             onClick={() => setTimeFrame('month')}
           >
             Last 30 Days
           </button>
-          <button 
+          <button
             className={`px-3 py-1 rounded text-sm ${timeFrame === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300'}`}
             onClick={() => setTimeFrame('all')}
           >
@@ -119,10 +140,30 @@ const Usage: React.FC = () => {
           </button>
         </div>
       </div>
-      
-      {summary ? (
+
+      {usageHistory.length > 0 ? (
         <div className="space-y-6">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-400 mb-1">
+              Account Credits ($)
+            </label>
+            <div className="flex items-center">
+              <input
+                type="text"
+                value={inputCredits}
+                onChange={(e) => setInputCredits(e.target.value)}
+                className="w-32 bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-blue-500 mr-2"
+              />
+              <button
+                onClick={updateAccountCredits}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md"
+              >
+                Update
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div className="bg-gray-900 rounded-lg p-4">
               <div className="text-gray-400 text-xs mb-1">Total Requests</div>
               <div className="text-xl font-semibold">{usageHistory.length}</div>
@@ -130,70 +171,80 @@ const Usage: React.FC = () => {
             <div className="bg-gray-900 rounded-lg p-4">
               <div className="text-gray-400 text-xs mb-1">Total Tokens</div>
               <div className="text-xl font-semibold">
-                {(summary.totalInputTokens + summary.totalOutputTokens).toLocaleString()}
+                {summary ? (summary.totalInputTokens + summary.totalOutputTokens).toLocaleString() : 0}
               </div>
             </div>
             <div className="bg-gray-900 rounded-lg p-4">
-              <div className="text-gray-400 text-xs mb-1">Total Cost</div>
-              <div className="text-xl font-semibold">${summary.totalCost.toFixed(2)}</div>
+              <div className="text-gray-400 text-xs mb-1">Total Spend</div>
+              <div className="text-xl font-semibold">${summary ? summary.totalSpend.toFixed(4) : '0.00'}</div>
+            </div>
+            <div className="bg-gray-900 rounded-lg p-4">
+              <div className="text-gray-400 text-xs mb-1">Account Balance</div>
+              <div className="text-xl font-semibold">
+                ${summary ? summary.accountBalance.toFixed(2) : accountCredits.toFixed(2)}
+              </div>
             </div>
           </div>
-          
-          <div>
-            <h3 className="text-lg font-medium mb-2">Usage by Model</h3>
-            <div className="bg-gray-900 rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-800">
-                    <th className="text-left p-3">Model</th>
-                    <th className="text-right p-3">Input Tokens</th>
-                    <th className="text-right p-3">Output Tokens</th>
-                    <th className="text-right p-3">Cost</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(summary.usageByModel).map(([model, data]) => (
-                    <tr key={model} className="border-b border-gray-800">
-                      <td className="p-3">{model.replace('claude-3-', '')}</td>
-                      <td className="text-right p-3">{data.inputTokens.toLocaleString()}</td>
-                      <td className="text-right p-3">{data.outputTokens.toLocaleString()}</td>
-                      <td className="text-right p-3">${data.cost.toFixed(4)}</td>
+
+          {summary && Object.keys(summary.usageByModel).length > 0 && (
+            <div>
+              <h3 className="text-lg font-medium mb-2">Usage by Model</h3>
+              <div className="bg-gray-900 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-800">
+                      <th className="text-left p-3">Model</th>
+                      <th className="text-right p-3">Input Tokens</th>
+                      <th className="text-right p-3">Output Tokens</th>
+                      <th className="text-right p-3">Spend</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          
-          <div>
-            <h3 className="text-lg font-medium mb-2">Recent Usage</h3>
-            <div className="bg-gray-900 rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-800">
-                    <th className="text-left p-3">Date</th>
-                    <th className="text-right p-3">Tokens</th>
-                    <th className="text-right p-3">Cost</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(summary.usageByDay)
-                    .sort((a, b) => b[0].localeCompare(a[0]))
-                    .slice(0, 7)
-                    .map(([day, data]) => (
-                      <tr key={day} className="border-b border-gray-800">
-                        <td className="p-3">{new Date(day).toLocaleDateString()}</td>
-                        <td className="text-right p-3">
-                          {(data.inputTokens + data.outputTokens).toLocaleString()}
-                        </td>
-                        <td className="text-right p-3">${data.cost.toFixed(4)}</td>
+                  </thead>
+                  <tbody>
+                    {Object.entries(summary.usageByModel).map(([model, data]) => (
+                      <tr key={model} className="border-b border-gray-800">
+                        <td className="p-3">{model.replace('claude-3-', '')}</td>
+                        <td className="text-right p-3">{data.inputTokens.toLocaleString()}</td>
+                        <td className="text-right p-3">{data.outputTokens.toLocaleString()}</td>
+                        <td className="text-right p-3">${data.spend.toFixed(4)}</td>
                       </tr>
-                    ))
-                  }
-                </tbody>
-              </table>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
+
+          {summary && Object.keys(summary.usageByDay).length > 0 && (
+            <div>
+              <h3 className="text-lg font-medium mb-2">Recent Usage</h3>
+              <div className="bg-gray-900 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-800">
+                      <th className="text-left p-3">Date</th>
+                      <th className="text-right p-3">Input Tokens</th>
+                      <th className="text-right p-3">Output Tokens</th>
+                      <th className="text-right p-3">Spend</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(summary.usageByDay)
+                      .sort((a, b) => b[0].localeCompare(a[0]))
+                      .slice(0, 7)
+                      .map(([day, data]) => (
+                        <tr key={day} className="border-b border-gray-800">
+                          <td className="p-3">{new Date(day).toLocaleDateString()}</td>
+                          <td className="text-right p-3">{data.inputTokens.toLocaleString()}</td>
+                          <td className="text-right p-3">{data.outputTokens.toLocaleString()}</td>
+                          <td className="text-right p-3">${data.spend.toFixed(4)}</td>
+                        </tr>
+                      ))
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="text-center py-8 text-gray-400">
@@ -204,4 +255,4 @@ const Usage: React.FC = () => {
   );
 };
 
-export default Usage;
+export default UsageTracking;

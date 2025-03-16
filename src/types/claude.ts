@@ -12,4 +12,9 @@ export interface ClaudeConfig {
       type: string;
       text: string;
     }>;
+    model: string;
+    usage: {
+      input_tokens: number;
+      output_tokens: number;
+    };
   }

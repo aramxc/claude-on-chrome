@@ -1,9 +1,9 @@
-import { ClaudeConfig } from "../types/claude";
+import { ClaudeConfig, ClaudeResponse } from "../types/claude";
 
 export async function analyzeText(
   text: string,
   config: ClaudeConfig
-): Promise<string> {
+): Promise<ClaudeResponse> {
   if (!config.apiKey) {
     throw new Error('API key is required');
   }
@@ -29,10 +29,14 @@ export async function analyzeText(
       throw new Error(response.error);
     }
     
-    // Extract response text from content array
-    const textBlock = response.result.content?.find((block: any) => block.type === 'text');
-    return textBlock?.text || 'No text response from Claude';
-    
+    // Extract content usage and model from the API response
+    const { content, usage, model } = response.result;
+
+    return {
+      content,
+      model,
+      usage
+    };
   } catch (error: any) {
     console.error("Error calling Claude API:", error);
     if (error.message?.includes('Could not establish connection')) {

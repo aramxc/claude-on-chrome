@@ -35,7 +35,7 @@ A powerful Chrome extension that integrates Anthropic's Claude AI directly into 
 ### API Key Security
 - Your Anthropic API key is stored securely using Chrome's built-in `chrome.storage.sync` encrypted storage
 - The key is never exposed to websites you visit and is only used for authenticated requests to Anthropic's API
-- We recommend rotating your API key periodically as a security best practice
+- It is recommended to rotate your API key periodically as a security best practice
 - If you suspect your key has been compromised, immediately regenerate it in the Anthropic Console
 
 ### Data Privacy

@@ -1,5 +1,16 @@
 import { cleanupOldCaches } from './services/cacheService';
 
+/*
+Background script for the extension.
+
+This script handles the following:
+- Setting up context menus
+- Handling content script messages
+- Cleaning up old caches
+- Running periodic cleanup  
+
+*/
+
 // Track tabs with loaded content script
 const contentScriptTabs = new Set<number>();
 
@@ -126,7 +137,7 @@ const handleClaudeAPI = async (message: any, sender: any, sendResponse: any) => 
   }
 };
 
-// Replace the last message listener with this properly implemented async version
+// Handle messages from the content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Handle ensuring content script is loaded
   if (message.action === 'ensureContentScriptLoaded' && message.tabId) {
@@ -149,6 +160,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   if (message.type === 'analyzeSelection' || message.type === 'analyzePage') {
     chrome.storage.local.set({ pendingAnalysis: message.data });
+  }
+
+  if (message.action === 'storeResponse') {
+    const { url, response } = message.data;
+    chrome.storage.local.set({ [`analysis-${url}`]: response });
+  }
+
+  if (message.action === 'getStoredResponse') {
+    const { url } = message.data;
+    chrome.storage.local.get([`analysis-${url}`], (data) => {
+      sendResponse(data[`analysis-${url}`] || null);
+    });
+    return true; // Required for async response
   }
   
   return true;
